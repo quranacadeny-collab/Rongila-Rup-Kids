@@ -1,12 +1,12 @@
 {
   "projectId": "rongila-rup",
-  "appId": "1:760283785904:web:2df9613f7be24221ffe975",
+  "appId": "1:760283785904:web:b73048d3c70f5811ffe975",
   "apiKey": "AIzaSyCEpDsEiJ76SI3oT-5DCtSTdYYJocYD1eU",
   "authDomain": "rongila-rup.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-rongilarup-7a2ca646-b3e6-4cd9-bf04-9261db449270",
+  "firestoreDatabaseId": "(default)",
   "storageBucket": "rongila-rup.firebasestorage.app",
   "messagingSenderId": "760283785904",
-  "measurementId": "",
+  "measurementId": "G-D302W4P24J",
   "oAuthClientId": "760283785904-s7nlnt51tn1lclo0ok1sqpcangmnfsm3.apps.googleusercontent.com",
   "recaptchaSiteKey": ""
 }

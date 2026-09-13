@@ -3,13 +3,13 @@ import { getAuth, GoogleAuthProvider } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 export const firebaseConfig = {
-  apiKey: "AIzaSyDGYfgtYQasD3GWI24_UyUizJElkOPvNuo",
-  authDomain: "rongila-rup-b847a.firebaseapp.com",
-  projectId: "rongila-rup-b847a",
-  storageBucket: "rongila-rup-b847a.firebasestorage.app",
-  messagingSenderId: "908961632616",
-  appId: "1:908961632616:web:87b8d37965b18672ab46dd",
-  measurementId: "G-S86ZB8PVT5"
+  apiKey: "AIzaSyCEpDsEiJ76SI3oT-5DCtSTdYYJocYD1eU",
+  authDomain: "rongila-rup.firebaseapp.com",
+  projectId: "rongila-rup",
+  storageBucket: "rongila-rup.firebasestorage.app",
+  messagingSenderId: "760283785904",
+  appId: "1:760283785904:web:b73048d3c70f5811ffe975",
+  measurementId: "G-D302W4P24J"
 };
 
 // Initialize Firebase

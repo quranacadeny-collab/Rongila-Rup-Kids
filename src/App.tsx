@@ -205,18 +205,32 @@ export default function App() {
       }
     });
 
+    // Helper to merge orders preserving delivered status
+    const mergeOrdersSafely = (currentOrders: Order[], incomingOrders: Order[]): Order[] => {
+      const map = new Map<string, Order>();
+      currentOrders.forEach(o => { if (o && o.id) map.set(o.id, o); });
+      incomingOrders.forEach(o => {
+        if (!o || !o.id) return;
+        const existing = map.get(o.id);
+        if (existing && existing.status === 'delivered' && o.status !== 'delivered') {
+          // Protect confirmed delivery status from being overwritten
+          map.set(o.id, { ...o, status: 'delivered', paymentStatus: 'VERIFIED_PAID', courierStatus: 'Delivered' });
+        } else {
+          map.set(o.id, o);
+        }
+      });
+      return Array.from(map.values()).sort((a, b) => {
+        const timeA = getSafeTimestamp(a.createdAt) || 0;
+        const timeB = getSafeTimestamp(b.createdAt) || 0;
+        return timeB - timeA;
+      });
+    };
+
     // 3. Subscribe to live Firestore orders without wiping existing cached orders
     const unsubscribeOrders = subscribeOrders((firestoreOrders) => {
       if (Array.isArray(firestoreOrders) && firestoreOrders.length > 0) {
         setOrders(prev => {
-          const map = new Map<string, Order>();
-          prev.forEach(o => { if (o && o.id) map.set(o.id, o); });
-          firestoreOrders.forEach(o => { if (o && o.id) map.set(o.id, o); });
-          const merged = Array.from(map.values()).sort((a, b) => {
-            const timeA = getSafeTimestamp(a.createdAt) || 0;
-            const timeB = getSafeTimestamp(b.createdAt) || 0;
-            return timeB - timeA;
-          });
+          const merged = mergeOrdersSafely(prev, firestoreOrders);
           try {
             localStorage.setItem('rr_orders', JSON.stringify(merged));
           } catch (e) {}
@@ -234,14 +248,7 @@ export default function App() {
           const serverOrders = Array.isArray(data) ? data : (Array.isArray(data?.orders) ? data.orders : []);
           if (serverOrders.length > 0) {
             setOrders(prev => {
-              const map = new Map<string, Order>();
-              prev.forEach(o => { if (o && o.id) map.set(o.id, o); });
-              serverOrders.forEach((o: Order) => { if (o && o.id) map.set(o.id, o); });
-              const merged = Array.from(map.values()).sort((a, b) => {
-                const timeA = getSafeTimestamp(a.createdAt) || 0;
-                const timeB = getSafeTimestamp(b.createdAt) || 0;
-                return timeB - timeA;
-              });
+              const merged = mergeOrdersSafely(prev, serverOrders);
               try {
                 localStorage.setItem('rr_orders', JSON.stringify(merged));
               } catch (e) {}
@@ -390,15 +397,48 @@ export default function App() {
     deleteProductFromFirestore(productId).catch(err => console.error('Delete product error:', err));
   };
 
-  // Admin Order Handlers
+  // Admin & Customer Order Handlers with Server Sync & Persistence Protection
   const handleUpdateOrderStatus = (orderId: string, newStatus: Order['status']) => {
-    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
+    setOrders(prev => {
+      const updated = prev.map(o => {
+        if (o.id !== orderId) return o;
+        return {
+          ...o,
+          status: newStatus,
+          paymentStatus: newStatus === 'delivered' ? 'VERIFIED_PAID' : o.paymentStatus,
+          courierStatus: newStatus === 'delivered' ? 'Delivered' : o.courierStatus
+        };
+      });
+      try { localStorage.setItem('rr_orders', JSON.stringify(updated)); } catch(e) {}
+      return updated;
+    });
+
     updateOrderStatusInFirestore(orderId, newStatus).catch(err => console.error('Update order status error:', err));
+
+    // Instant server-side sync so revenue calculation never reverts on refresh or polling
+    fetch(`/api/orders/${orderId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        status: newStatus,
+        paymentStatus: newStatus === 'delivered' ? 'VERIFIED_PAID' : undefined,
+        courierStatus: newStatus === 'delivered' ? 'Delivered' : undefined
+      })
+    }).catch(err => console.error('Server sync error:', err));
   };
 
   const handleUpdateFullOrder = (updatedOrder: Order) => {
-    setOrders(prev => prev.map(o => o.id === updatedOrder.id ? updatedOrder : o));
+    setOrders(prev => {
+      const updated = prev.map(o => o.id === updatedOrder.id ? updatedOrder : o);
+      try { localStorage.setItem('rr_orders', JSON.stringify(updated)); } catch(e) {}
+      return updated;
+    });
     saveOrderToFirestore(updatedOrder).catch(err => console.error('Update full order error:', err));
+    fetch(`/api/orders/${updatedOrder.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updatedOrder)
+    }).catch(err => console.error('Server sync full order error:', err));
   };
 
   const handleOrderPlaced = (newOrder: Order) => {
@@ -943,6 +983,7 @@ export default function App() {
         lang={lang}
         orders={orders}
         initialOrderId={trackOrderIdParam}
+        onUpdateOrderStatus={handleUpdateOrderStatus}
       />
 
       {/* Product Multi-Platform Share Modal */}
@@ -960,6 +1001,7 @@ export default function App() {
         lang={lang}
         orders={orders}
         onOpenTrackOrder={() => setIsTrackOrderOpen(true)}
+        onUpdateOrderStatus={handleUpdateOrderStatus}
       />
 
       {/* Footer */}

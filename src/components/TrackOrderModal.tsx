@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { X, Search, Truck, CheckCircle2, Clock, MapPin, PhoneCall, AlertCircle, AlertTriangle, RefreshCw } from 'lucide-react';
+import { X, Search, Truck, CheckCircle2, Clock, MapPin, PhoneCall, AlertCircle, AlertTriangle, RefreshCw, PackageCheck } from 'lucide-react';
 import { Language, Order } from '../types';
 import { db, COLLECTIONS } from '../firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
 
 interface TrackOrderModalProps {
   isOpen: boolean;
@@ -10,6 +10,7 @@ interface TrackOrderModalProps {
   lang: Language;
   orders?: Order[];
   initialOrderId?: string | null;
+  onUpdateOrderStatus?: (orderId: string, status: Order['status']) => void;
 }
 
 export const TrackOrderModal: React.FC<TrackOrderModalProps> = ({
@@ -17,12 +18,60 @@ export const TrackOrderModal: React.FC<TrackOrderModalProps> = ({
   onClose,
   lang,
   orders = [],
-  initialOrderId = null
+  initialOrderId = null,
+  onUpdateOrderStatus
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [foundOrder, setFoundOrder] = useState<Order | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
+  const [isConfirmingDelivery, setIsConfirmingDelivery] = useState(false);
+  const [deliveryConfirmedSuccess, setDeliveryConfirmedSuccess] = useState(false);
+
+  const handleCustomerConfirmDelivered = async (orderId: string) => {
+    if (!orderId || isConfirmingDelivery) return;
+    setIsConfirmingDelivery(true);
+    try {
+      if (onUpdateOrderStatus) {
+        onUpdateOrderStatus(orderId, 'delivered');
+      }
+
+      setFoundOrder(prev => prev ? {
+        ...prev,
+        status: 'delivered',
+        paymentStatus: 'VERIFIED_PAID',
+        courierStatus: 'Delivered'
+      } : null);
+
+      setDeliveryConfirmedSuccess(true);
+
+      // Direct Firestore sync
+      try {
+        await updateDoc(doc(db, COLLECTIONS.ORDERS, orderId), {
+          status: 'delivered',
+          paymentStatus: 'VERIFIED_PAID',
+          courierStatus: 'Delivered'
+        });
+      } catch (e) {}
+
+      // Server PATCH sync
+      try {
+        await fetch(`/api/orders/${orderId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            status: 'delivered',
+            paymentStatus: 'VERIFIED_PAID',
+            courierStatus: 'Delivered'
+          })
+        });
+      } catch (e) {}
+    } catch (err) {
+      console.error('Confirm delivery error:', err);
+    } finally {
+      setIsConfirmingDelivery(false);
+    }
+  };
 
   const executeTrackSearch = (targetQuery: string) => {
     const rawQuery = (targetQuery || '').trim();
@@ -361,6 +410,48 @@ export const TrackOrderModal: React.FC<TrackOrderModalProps> = ({
                       </div>
                     )}
                   </div>
+
+                  {/* Customer Product Received / Delivery Confirmation */}
+                  {foundOrder.status === 'delivered' || deliveryConfirmedSuccess ? (
+                    <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-xl flex items-center gap-2 text-emerald-950 text-xs font-semibold">
+                      <CheckCircle2 size={18} className="text-emerald-600 shrink-0" />
+                      <div>
+                        <div className="font-bold text-emerald-900">
+                          {lang === 'bn' ? '✓ পার্সেল ডেলিভারি নিশ্চিত হয়েছে' : '✓ Delivery Confirmed'}
+                        </div>
+                        <div className="text-[10px] text-stone-600">
+                          {lang === 'bn' ? 'রঙিলা রূপ কিডস-এর সাথে কেনাকাটা করার জন্য আন্তরিক ধন্যবাদ!' : 'Thank you for shopping with Rongila Rup Kids!'}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3">
+                      <div className="text-left">
+                        <div className="font-bold text-xs text-emerald-950 flex items-center gap-1.5">
+                          <PackageCheck size={16} className="text-emerald-700 shrink-0" />
+                          <span>{lang === 'bn' ? 'পণ্য হাতে পেয়ে গেছেন?' : 'Received your package?'}</span>
+                        </div>
+                        <p className="text-[10px] text-stone-600 mt-0.5">
+                          {lang === 'bn' 
+                            ? 'রাইডারের থেকে পার্সেল বুঝে পেয়ে থাকলে এখানে নিশ্চিত করুন।' 
+                            : 'Click confirm once you receive your items.'}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={isConfirmingDelivery}
+                        onClick={() => handleCustomerConfirmDelivered(foundOrder.id)}
+                        className="w-full sm:w-auto px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-60"
+                      >
+                        <CheckCircle2 size={14} />
+                        <span>
+                          {isConfirmingDelivery 
+                            ? (lang === 'bn' ? 'কনফার্ম হচ্ছে...' : 'Confirming...') 
+                            : (lang === 'bn' ? 'পণ্য পেয়েছি (কনফার্ম)' : 'Confirm Received')}
+                        </span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })()

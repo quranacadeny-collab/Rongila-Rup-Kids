@@ -1,0 +1,6 @@
+{
+  "name": "Rongila Rup Kids",
+  "description": "Premium Kids & Baby online e-commerce platform offering adorable frocks, boys outfits, newborn rompers, baby footwear, learning toys, and an AI Kids Stylist.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

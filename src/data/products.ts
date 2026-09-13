@@ -1,0 +1,474 @@
+import { Product } from '../types';
+
+import heroBannerImg from '../assets/images/rongila_hero_banner_1785695137887.jpg';
+import jamdaniImg from '../assets/images/jamdani_saree_collection_1785695153522.jpg';
+import panjabiImg from '../assets/images/panjabi_collection_1785695168399.jpg';
+import jewelleryImg from '../assets/images/jewellery_collection_1785695196550.jpg';
+
+export const HERO_IMAGES = {
+  banner: heroBannerImg,
+  jamdani: jamdaniImg,
+  panjabi: panjabiImg,
+  jewellery: jewelleryImg,
+};
+
+export const PRODUCTS: Product[] = [
+  {
+    id: 'rr-kids-001',
+    sku: 'KD-FRK-01',
+    nameBn: 'প্রিমিয়াম পিঙ্ক ফ্লোরাল বেবি ফ্রক',
+    nameEn: 'Premium Pink Floral Baby Frock',
+    category: 'babydress',
+    price: 950,
+    originalPrice: 1250,
+    stockQuantity: 5,
+    discountTag: '24% OFF',
+    rating: 4.9,
+    reviewsCount: 142,
+    image: 'https://images.unsplash.com/photo-1518831959646-742c3a14ebf7?auto=format&fit=crop&q=80&w=800',
+    images: [
+      'https://images.unsplash.com/photo-1518831959646-742c3a14ebf7?auto=format&fit=crop&q=80&w=800',
+      'https://images.unsplash.com/photo-1596870230751-ebdfce98ec42?auto=format&fit=crop&q=80&w=800'
+    ],
+    fabricBn: '১০০% অরগানিক সফট কটন ও সুতি লাইনিং',
+    fabricEn: '100% Organic Soft Cotton & Breathable Lining',
+    colorBn: 'গোলাপী ও সাদা',
+    colorEn: 'Pink & White',
+    descriptionBn: 'ছোট সোনামণিদের জন্য নরম ও আরামদায়ক ১০০% অর্গানিক সুতি কটন ফ্লোরাল ফ্রক। সুতি কাপড়ের ইনার থাকায় ত্বকে কোনো অ্যালার্জি হয় না।',
+    descriptionEn: 'Ultra-soft organic cotton baby frock designed for total comfort and hypoallergenic delicate baby skin.',
+    inStock: true,
+    isBestSeller: true,
+    isFestiveSpecial: true,
+    sizes: ['6-12 Months', '1-2 Years', '2-3 Years', '3-4 Years'],
+    tags: ['baby frock', 'frock', 'pink frock', 'kids dress'],
+    detailsBn: [
+      '১০০% খাঁটি সফট কম্বড সুতি কটন',
+      'কোমল ইনার সুতি লাইনিং কাপলার',
+      'সহজ জিপার ও কিউট বো ডিজাইন',
+      'হাতে বা মেশিনে সহজে ধোয়া যায়'
+    ],
+    detailsEn: [
+      '100% Combed Breathable Organic Cotton',
+      'Skin-safe non-irritating inner lining',
+      'Easy back zipper with cute ribbon bow',
+      'Machine washable gently'
+    ]
+  },
+  {
+    id: 'rr-kids-002',
+    sku: 'KD-SET-02',
+    nameBn: 'কিউট বয়েজ কটন শার্ট ও শোর্টস ২-পিস সেট',
+    nameEn: 'Cute Boys Cotton Shirt & Shorts 2-Piece Set',
+    category: 'babyset',
+    price: 1250,
+    originalPrice: 1550,
+    stockQuantity: 3,
+    discountTag: '19% OFF',
+    rating: 4.8,
+    reviewsCount: 98,
+    image: 'https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&q=80&w=800',
+    images: [
+      'https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&q=80&w=800',
+      'https://images.unsplash.com/photo-1622290291468-a28f7a7dc6a8?auto=format&fit=crop&q=80&w=800'
+    ],
+    fabricBn: 'সফট ডেনিম ও স্পন কটন',
+    fabricEn: 'Soft Denim & Spun Cotton Blend',
+    colorBn: 'স্কাই ব্লু ও হোয়াইট',
+    colorEn: 'Sky Blue & White',
+    descriptionBn: 'বাবুদের গরমের দিনে পরা ও ঘোরার জন্য স্মার্ট ২-পিস শার্ট ও প্যান্ট সেট। আরামদায়ক ও স্টাইলিশ লুক।',
+    descriptionEn: 'Smart 2-piece summer set including buttoned short sleeve shirt and comfortable elastic waist shorts.',
+    inStock: true,
+    isBestSeller: true,
+    sizes: ['1-2 Years', '2-3 Years', '4-5 Years'],
+    tags: ['baby set', 'boys dress', 'shirt set'],
+    detailsBn: [
+      'ইলাস্টিক ওয়েস্টব্যান্ড প্যান্ট',
+      'সফট স্কিন-ফ্রেন্ডলি ফেব্রিক',
+      'প্রিন্টেড ডিজাইন ও ফ্রন্ট পকেট'
+    ],
+    detailsEn: [
+      'Elastic waistband for active toddler fit',
+      'Skin-friendly breathable materials',
+      'Charming printed design'
+    ]
+  },
+  {
+    id: 'rr-kids-003',
+    sku: 'KD-GOWN-03',
+    nameBn: 'রয়্যাল প্রিমিয়াম বেবি গার্ল পার্টি গাউন',
+    nameEn: 'Royal Premium Baby Girl Party Gown',
+    category: 'frock',
+    price: 1850,
+    originalPrice: 2300,
+    stockQuantity: 7,
+    discountTag: '20% OFF',
+    rating: 4.9,
+    reviewsCount: 185,
+    image: 'https://images.unsplash.com/photo-1596870230751-ebdfce98ec42?auto=format&fit=crop&q=80&w=800',
+    images: [
+      'https://images.unsplash.com/photo-1596870230751-ebdfce98ec42?auto=format&fit=crop&q=80&w=800',
+      'https://images.unsplash.com/photo-1518831959646-742c3a14ebf7?auto=format&fit=crop&q=80&w=800'
+    ],
+    fabricBn: 'অর্গানজা টিস্যু ও নরম স্যাটিন লাইনিং',
+    fabricEn: 'Organza Tissue with Soft Satin Lining',
+    colorBn: 'মারুন ও গোল্ডেন',
+    colorEn: 'Maroon & Golden',
+    descriptionBn: 'জন্মদিন, বিয়ে বা উৎসবের জন্য রাজকীয় জাঁকজমকপূর্ণ বেবি পার্টি গাউন। ভেতরে নরম সুতি কটন হওয়ায় বেশ আরামদায়ক।',
+    descriptionEn: 'Exquisite party gown with layered organza flare and metallic embroidery, lined with cotton for maximum comfort.',
+    inStock: true,
+    isNewArrival: true,
+    isFestiveSpecial: true,
+    sizes: ['1-2 Years', '2-3 Years', '3-4 Years', '5-6 Years'],
+    tags: ['party gown', 'frock', 'baby gown'],
+    detailsBn: [
+      'মাল্টি-লেয়ার ফ্লেয়ার স্কার্ট',
+      'হাতে বুনন সূক্ষ্ম জরি কাজ',
+      'সুতি সফট কটন ইনার'
+    ],
+    detailsEn: [
+      'Multi-layer fluffy skirt flare',
+      'Intricate golden thread embroidery',
+      'Fully cotton-lined interior'
+    ]
+  },
+  {
+    id: 'rr-kids-004',
+    sku: 'KD-PNJ-04',
+    nameBn: 'কিডস উৎসব সিল্ক পাঞ্জাবি ও পায়জামা সেট',
+    nameEn: 'Kids Festive Silk Panjabi & Pajama Set',
+    category: 'panjabi',
+    price: 1450,
+    originalPrice: 1800,
+    stockQuantity: 12,
+    discountTag: '19% OFF',
+    rating: 4.8,
+    reviewsCount: 76,
+    image: 'https://images.unsplash.com/photo-1622290291468-a28f7a7dc6a8?auto=format&fit=crop&q=80&w=800',
+    images: [
+      'https://images.unsplash.com/photo-1622290291468-a28f7a7dc6a8?auto=format&fit=crop&q=80&w=800'
+    ],
+    fabricBn: 'প্রিমিয়াম রেশম সিল্ক ও সুতি পায়জামা',
+    fabricEn: 'Premium Resham Silk & Cotton Pajama',
+    colorBn: 'রয়্যাল ব্লু ও হোয়াইট',
+    colorEn: 'Royal Blue & White',
+    descriptionBn: 'ঈদের দিন ও যেকোনো আয়োজনে ছোট বাবুদের ট্রেডিশনাল লুকে তৈরি রেশম সিল্ক পাঞ্জাবি সেট।',
+    descriptionEn: 'Traditional ethnic silk Panjabi for kids with matching comfortable white pajama set.',
+    inStock: true,
+    isFestiveSpecial: true,
+    sizes: ['1-2 Years', '2-3 Years', '4-5 Years', '6-7 Years'],
+    tags: ['kids panjabi', 'panjabi', 'eid collection'],
+    detailsBn: [
+      'কলাড়ে সূক্ষ্ম কারচুপি এম্ব্রয়ডারি',
+      'ইলাস্টিক ওয়েস্ট পায়জামা',
+      'সহজ বোতাম লকিং'
+    ],
+    detailsEn: [
+      'Delicate embroidery on collar',
+      'Elasticated comfortable pajama waist',
+      'Easy front button fastening'
+    ]
+  },
+  {
+    id: 'rr-kids-005',
+    sku: 'KD-SHU-05',
+    nameBn: 'কিউট বেবি নবাগত নরম লেদার জুতা সেট',
+    nameEn: 'Cute Baby First Walk Soft Leather Shoes',
+    category: 'footwear',
+    price: 650,
+    originalPrice: 850,
+    stockQuantity: 2,
+    discountTag: '23% OFF',
+    rating: 4.9,
+    reviewsCount: 61,
+    image: 'https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?auto=format&fit=crop&q=80&w=800',
+    images: [
+      'https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?auto=format&fit=crop&q=80&w=800'
+    ],
+    fabricBn: 'সফট অ্যান্টি-স্লিপ ভেলভেট ও লেদার',
+    fabricEn: 'Soft Anti-Slip Velvet & PU Leather',
+    colorBn: 'পিঙ্ক ও গোল্ডেন',
+    colorEn: 'Pink & Golden',
+    descriptionBn: 'নরম সোলের অ্যান্টি-স্লিপ গ্রিপ বেবি শু। হাঁটা শেখার সময় বাবুদের পায়ের জন্য পরম সুরক্ষিত।',
+    descriptionEn: 'Non-slip soft sole infant baby shoes designed for safe first steps and stylish baby outfit match.',
+    inStock: true,
+    isBestSeller: true,
+    sizes: ['0-6 Months', '6-12 Months', '12-18 Months'],
+    tags: ['baby shoes', 'shoes', 'footwear'],
+    detailsBn: [
+      'অ্যান্টি-স্লিপ রাবার সোলে সিকিউরিটি',
+      'বেলক্রো বা ফিতা স্ট্র্যাপ',
+      'অতি হালকা ও নরম'
+    ],
+    detailsEn: [
+      'Anti-slip grip sole protection',
+      'Easy velcro strap closure',
+      'Lightweight cushion sole'
+    ]
+  },
+  {
+    id: 'rr-kids-006',
+    sku: 'KD-ACC-06',
+    nameBn: 'ফ্লাওয়ার ক্রাউন ও কিউট হেয়ার ব্যান্ড ৩-পিস সেট',
+    nameEn: 'Flower Crown & Cute Hair Band 3-Piece Set',
+    category: 'accessories',
+    price: 350,
+    originalPrice: 500,
+    stockQuantity: 4,
+    discountTag: '30% OFF',
+    rating: 4.8,
+    reviewsCount: 112,
+    image: 'https://images.unsplash.com/photo-1519689680058-324335c77eba?auto=format&fit=crop&q=80&w=800',
+    images: [
+      'https://images.unsplash.com/photo-1519689680058-324335c77eba?auto=format&fit=crop&q=80&w=800'
+    ],
+    fabricBn: 'সফট ইলাস্টিক ব্যান্ড ও সিল্ক ফ্লাওয়ার',
+    fabricEn: 'Soft Elastic Band & Silk Flowers',
+    colorBn: 'মাল্টিকালার পেস্টেল',
+    colorEn: 'Multicolor Pastel',
+    descriptionBn: 'ছোট রাজকন্যাদের সাজাতে ৩টি চমৎকার ফ্লাওয়ার অ্যান্ড রিবন হেয়ার ব্যান্ডের স্পেশাল কম্বো প্যাক।',
+    descriptionEn: 'Adorable set of 3 soft stretchy headband hair accessories for baby girls photo shoots and celebrations.',
+    inStock: true,
+    isNewArrival: true,
+    sizes: ['Free Size (0-4 Years)'],
+    tags: ['hair band', 'accessories', 'crown'],
+    detailsBn: [
+      'মাথায় কোন চাপ ফেলে না এমন অতি নরম ইলাস্টিক',
+      'হাতে তৈরি সূক্ষ্ম ফুলের সাজ',
+      'ফটোগ্রাফির জন্য বেস্ট'
+    ],
+    detailsEn: [
+      'Ultra soft elastic that causes no head strain',
+      'Handcrafted silk floral accents',
+      'Ideal for milestone photography'
+    ]
+  },
+  {
+    id: 'rr-kids-007',
+    sku: 'KD-TOY-07',
+    nameBn: 'সফট টেডি বিয়ার ও টয় গিফট সেট',
+    nameEn: 'Soft Plush Teddy Bear & Toy Gift Set',
+    category: 'toys',
+    price: 750,
+    originalPrice: 950,
+    stockQuantity: 15,
+    discountTag: '21% OFF',
+    rating: 4.9,
+    reviewsCount: 88,
+    image: 'https://images.unsplash.com/photo-1558060370-d644479cb6f7?auto=format&fit=crop&q=80&w=800',
+    images: [
+      'https://images.unsplash.com/photo-1558060370-d644479cb6f7?auto=format&fit=crop&q=80&w=800'
+    ],
+    fabricBn: '১০০% নন-টক্সিক প্লাশ কটন',
+    fabricEn: '100% Non-Toxic Plush Cotton',
+    colorBn: 'ব্রাউন ও বেইজ',
+    colorEn: 'Brown & Beige',
+    descriptionBn: 'শিশুদের প্রিয় নন-টক্সিক নরম তুলতুলে টেডি বিয়ার সংগে উপহারের সুন্দর বক্স।',
+    descriptionEn: 'Cuddly non-toxic plush teddy bear gift box set perfect for baby gifts and birthdays.',
+    inStock: true,
+    sizes: ['Standard Toy Size'],
+    tags: ['toy', 'teddy bear', 'gift'],
+    detailsBn: [
+      '১০০% ধোয়া যায় এমন নিরাপদ ফেব্রিক',
+      'বাচ্চাদের জন্য ১০০% বিষাক্ততামুক্ত',
+      'সুন্দর গিফট বক্স মোড়ক'
+    ],
+    detailsEn: [
+      '100% washable hypo-allergenic plush',
+      'Safety certified non-toxic materials',
+      'Includes premium gift box packaging'
+    ]
+  },
+  {
+    id: 'rr-kids-008',
+    sku: 'KD-ROM-08',
+    nameBn: 'নিউবর্ন কটন রম্পার স্যুট ৩-পিস প্যাক',
+    nameEn: 'Newborn Organic Cotton Romper Suit 3-Pack',
+    category: 'babyset',
+    price: 1150,
+    originalPrice: 1400,
+    stockQuantity: 8,
+    discountTag: '18% OFF',
+    rating: 4.9,
+    reviewsCount: 94,
+    image: 'https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&q=80&w=800',
+    images: [
+      'https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&q=80&w=800'
+    ],
+    fabricBn: '১০০% অর্গানিক নরম কম্বড সুতি',
+    fabricEn: '100% Organic Soft Combed Cotton',
+    colorBn: 'হলুদ, নীল ও সাদা',
+    colorEn: 'Yellow, Blue & White',
+    descriptionBn: 'নবজাতক বাবুদের সারাদিনের আরাম নিশ্চিত করতে ৩টি ফুল স্লিপ সুতি রম্পারের কম্বো সেট।',
+    descriptionEn: '3-pack newborn sleepsuit rompers with snap buttons for effortless diaper changes.',
+    inStock: true,
+    isBestSeller: true,
+    sizes: ['0-3 Months', '3-6 Months', '6-9 Months'],
+    tags: ['romper', 'baby set', 'newborn'],
+    detailsBn: [
+      'নিচে সহজে ডায়াপার চেঞ্জের স্ন্যাপ বোতাম',
+      'অর্গানিক সফট কাপড়',
+      'প্রিন্টেড ডিজাইন'
+    ],
+    detailsEn: [
+      'Bottom snap buttons for quick diaper changes',
+      'Organic breathable combed cotton',
+      'Adorable cartoon prints'
+    ]
+  },
+  {
+    id: 'rr-combo-001',
+    sku: 'RR-CMB-01',
+    nameBn: 'মেগা বেবি গার্ল পার্টি গিফট কম্বো (ফ্রক + ম্যাচিং জুতো + ক্রাউন ব্যান্ড)',
+    nameEn: 'Mega Baby Girl Luxury Gift Combo Package (Frock + Shoes + Crown Band)',
+    category: 'combo',
+    price: 2450,
+    originalPrice: 3200,
+    stockQuantity: 10,
+    discountTag: '23% OFF',
+    rating: 5.0,
+    reviewsCount: 142,
+    image: 'https://images.unsplash.com/photo-1518831959646-742c3a14ebf7?auto=format&fit=crop&q=80&w=800',
+    images: [
+      'https://images.unsplash.com/photo-1518831959646-742c3a14ebf7?auto=format&fit=crop&q=80&w=800',
+      'https://images.unsplash.com/photo-1596870230751-ebdfce98ec42?auto=format&fit=crop&q=80&w=800',
+      'https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?auto=format&fit=crop&q=80&w=800'
+    ],
+    fabricBn: 'প্রিমিয়াম সুতি ও সফট অর্গানজা লাইনিং',
+    fabricEn: 'Premium Cotton & Soft Organza Lining',
+    colorBn: 'রয়েল পিঙ্ক ও গোল্ডেন',
+    colorEn: 'Royal Pink & Golden',
+    descriptionBn: 'ছোট রাজকন্যাদের জন্মদিনের স্পেশাল মেগা গিফট কম্বো প্যাকেজ। এতে থাকছে ১টি গর্জিয়াস পার্টি ফ্রক, ১ জোড়া নরম লেদার জুতো এবং ১টি কিউট ক্রাউন হেয়ারব্যান্ড।',
+    descriptionEn: 'All-in-one complete baby girl birthday combo package including premium party frock, non-slip soft leather shoes, and royal crystal hairband.',
+    inStock: true,
+    isBestSeller: true,
+    isFestiveSpecial: true,
+    sizes: ['6-12 Months', '1-2 Years', '2-3 Years', '3-4 Years'],
+    tags: ['combo package', 'baby combo', 'frock set', 'gift box'],
+    detailsBn: [
+      '১x প্রিমিয়াম পিঙ্ক পার্টি ফ্রক',
+      '১x সফট লেদার অ্যান্টি-স্লিপ জুতো',
+      '১x ম্যাচিং কিউট হেয়ারব্যান্ড',
+      'ফ্রি লাক্সারি গিফট প্যাকেজিং বক্স'
+    ],
+    detailsEn: [
+      '1x Premium Pink Party Frock',
+      '1x Soft Anti-Slip Baby Shoes',
+      '1x Matching Cute Crown Band',
+      'Free Luxury Gift Packaging Box'
+    ]
+  },
+  {
+    id: 'rr-combo-002',
+    sku: 'RR-CMB-02',
+    nameBn: 'বয়েজ ঈদ ধামাকা ৪-পিস কম্বো (পাঞ্জাবি + পায়জামা + কোটি + জুতো)',
+    nameEn: 'Boys Festive 4-Piece Royal Combo Set (Panjabi + Pajama + Koti + Shoes)',
+    category: 'combo',
+    price: 2850,
+    originalPrice: 3600,
+    stockQuantity: 8,
+    discountTag: '21% OFF',
+    rating: 4.9,
+    reviewsCount: 118,
+    image: 'https://images.unsplash.com/photo-1622290291468-a28f7a7dc6a8?auto=format&fit=crop&q=80&w=800',
+    images: [
+      'https://images.unsplash.com/photo-1622290291468-a28f7a7dc6a8?auto=format&fit=crop&q=80&w=800',
+      'https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?auto=format&fit=crop&q=80&w=800'
+    ],
+    fabricBn: 'খাঁটি রেশম সিল্ক ও সুতি কটন',
+    fabricEn: 'Pure Resham Silk & Cotton',
+    colorBn: 'নেভি ব্লু ও গোল্ডেন',
+    colorEn: 'Navy Blue & Golden',
+    descriptionBn: 'বাবু সোনামণিদের জন্য স্পেশাল ঈদ ও উৎসবের ৪-পিস ধামাকা কম্বো সেট। স্টাইলিশ এম্ব্রয়ডারি কোটি সহ ফুল লুক।',
+    descriptionEn: '4-Piece boys traditional combo set including embroidered silk Panjabi, white pajama, designer koti waistcoat, and baby footwear.',
+    inStock: true,
+    isFestiveSpecial: true,
+    sizes: ['1-2 Years', '2-3 Years', '4-5 Years', '6-7 Years'],
+    tags: ['boys combo', 'panjabi combo', 'eid gift'],
+    detailsBn: [
+      '১x সিল্ক প্রিমিয়াম পাঞ্জাবি',
+      '১x সফট কটন পায়জামা',
+      '১x গর্জিয়াস কারচুপি কোটি',
+      '১x কম্ফোর্ট বেবি শু'
+    ],
+    detailsEn: [
+      '1x Silk Premium Panjabi',
+      '1x Soft Cotton Pajama',
+      '1x Gorgeous Embroidered Koti',
+      '1x Comfort Footwear'
+    ]
+  },
+  {
+    id: 'rr-combo-003',
+    sku: 'RR-CMB-03',
+    nameBn: 'নিউবর্ন বেবি ওয়েলকাম হ্যাম্পার কম্বো (৫-পিস অর্গানিক সুট + কিউট টেডি)',
+    nameEn: 'Newborn Baby Welcome 5-Piece Hamper Combo (Romper + Cap + Mittens + Teddy)',
+    category: 'combo',
+    price: 1950,
+    originalPrice: 2500,
+    stockQuantity: 12,
+    discountTag: '22% OFF',
+    rating: 5.0,
+    reviewsCount: 89,
+    image: 'https://images.unsplash.com/photo-1558060370-d644479cb6f7?auto=format&fit=crop&q=80&w=800',
+    images: [
+      'https://images.unsplash.com/photo-1558060370-d644479cb6f7?auto=format&fit=crop&q=80&w=800',
+      'https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&q=80&w=800'
+    ],
+    fabricBn: '১০০% অরগানিক হাইপোঅ্যালার্জিক কটন',
+    fabricEn: '100% Organic Hypoallergenic Cotton',
+    colorBn: 'হালকা হলুদ ও সাদা',
+    colorEn: 'Pastel Yellow & White',
+    descriptionBn: 'নতুন অতিথির আগমন উপলক্ষে সেরা উপহার কম্বো সেট। নবজাতকের ত্বকের সুরক্ষায় ১০০% নিরাপদ ও সফট কাপড়।',
+    descriptionEn: 'Luxury newborn welcome gift hamper with organic cotton romper, matching cap, mittens, booties, and cute plush teddy bear.',
+    inStock: true,
+    isBestSeller: true,
+    sizes: ['0-3 Months', '3-6 Months'],
+    tags: ['newborn combo', 'hamper', 'baby gift'],
+    detailsBn: [
+      '১x ফুল স্ন্যাপ সুতি রম্পার',
+      '১x ম্যাচিং বেবি ক্যাপ ও মিটেনস',
+      '১x কিউট প্লাশ টেডি বিয়ার',
+      '১x মেমোরি কার্ড ও স্পেশাল গিফট বক্স'
+    ],
+    detailsEn: [
+      '1x Full Snap Cotton Romper',
+      '1x Matching Baby Cap & Mittens',
+      '1x Cute Plush Teddy Bear',
+      '1x Memory Card & Luxury Gift Box'
+    ]
+  }
+].map((p, idx) => ({
+  ...p,
+  createdAt: (p as any).createdAt || (1700000000000 - idx * 100000)
+}));
+
+export const COUPON_CODES: Record<string, number> = {
+  'RONGILA20': 0.20,
+  'EID500': 0.15,
+  'BOISHAKH10': 0.10,
+  'EID2026': 0.25
+};
+
+export const INITIAL_REVIEWS = [
+  {
+    id: 'rev-1',
+    customerName: 'Jannatul Ferdous',
+    rating: 5,
+    commentBn: 'মেয়ের জন্য ফ্রকটা নিয়েছিলাম, কাপড়ের কোয়ালিটি অনেক অনেক ভালো! অনেক মাশাআল্লাহ সুন্দর লাগছে।',
+    commentEn: 'Ordered the baby frock for my daughter, fabric quality is amazing and super soft!',
+    date: '2026-05-20',
+    verified: true
+  },
+  {
+    id: 'rev-2',
+    customerName: 'মিপ্রু রানী',
+    rating: 5,
+    commentBn: 'বেবি বয় এর জন্য পাঞ্জাবি সেট টা ১ দিনে ডেলিভারি পেলাম। সাইজ একদম পারফেক্ট ছিল।',
+    commentEn: 'Received the Panjabi set in just 1 day! Size was perfect for my baby boy.',
+    date: '2026-05-18',
+    verified: true
+  }
+];
+
+export const INITIAL_ORDERS: any[] = [];
+

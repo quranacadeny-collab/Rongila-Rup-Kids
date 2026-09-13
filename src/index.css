@@ -1,0 +1,112 @@
+@import "tailwindcss";
+
+:root, [data-theme="crimson"], body.theme-crimson {
+  --primary-brand: #881337;
+  --primary-brand-hover: #4c0519;
+  --accent-brand: #f59e0b;
+}
+
+[data-theme="emerald"], body.theme-emerald {
+  --primary-brand: #065f46;
+  --primary-brand-hover: #022c22;
+  --accent-brand: #10b981;
+  background-color: #f2fbf7;
+}
+
+[data-theme="ochre"], body.theme-ochre {
+  --primary-brand: #92400e;
+  --primary-brand-hover: #451a03;
+  --accent-brand: #d97706;
+  background-color: #fffdf5;
+}
+
+[data-theme="sapphire"], body.theme-sapphire {
+  --primary-brand: #1e3a8a;
+  --primary-brand-hover: #172554;
+  --accent-brand: #3b82f6;
+  background-color: #f4f8ff;
+}
+
+[data-theme="crimson"], body.theme-crimson {
+  background-color: #fff8f6;
+}
+
+html {
+  overflow-x: hidden;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  overflow-x: hidden;
+  width: 100%;
+  min-height: 100%;
+  background-color: #fff8f6;
+  margin: 0;
+  padding: 0;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+#root {
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Custom scrollbar styling */
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Printable Invoice & Sticker Formatting */
+@media print {
+  @page {
+    margin: 10mm;
+    size: auto;
+  }
+  
+  html, body {
+    background: white !important;
+    color: #1c1917 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  #printable-area, #printable-area * {
+    visibility: visible !important;
+  }
+
+  #printable-area {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 16px !important;
+    background: white !important;
+    border: 1px solid #d6d3d1 !important;
+    box-shadow: none !important;
+    border-radius: 8px !important;
+    z-index: 999999 !important;
+  }
+
+  /* Completely strip out interactive buttons, headers & footers on paper */
+  button, 
+  .print\:hidden, 
+  .no-print {
+    display: none !important;
+    visibility: hidden !important;
+  }
+}
+

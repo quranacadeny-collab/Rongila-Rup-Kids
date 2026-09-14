@@ -41,68 +41,91 @@ async function sendRongilaRupEmail(params: SendEmailParams): Promise<{ success: 
   const relayUser = (process.env.AUTH_GMAIL_USER || "ataurulipur14@gmail.com").trim();
   const relayPass = (process.env.AUTH_GMAIL_PASS || "pzqqllqohgfybnpw").replace(/\s+/g, "");
 
-  const timeoutMs = 4500; // Fast timeout: never hang the user!
-  const sendWithTimeout = async (transporter: any, mailOptions: any) => {
-    return Promise.race([
-      transporter.sendMail(mailOptions),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("Email delivery timed out")), timeoutMs))
-    ]);
+  const timeoutMs = 10000; // 10 seconds for reliable cloud container SMTP handshakes
+
+  const createTransporter = (user: string, pass: string, port: number = 465, secure: boolean = true) => {
+    return nodemailer.createTransport({
+      host: "smtp.gmail.com",
+      port,
+      secure,
+      auth: { user, pass },
+      tls: { rejectUnauthorized: false },
+      connectionTimeout: 8000,
+      greetingTimeout: 8000,
+      socketTimeout: 8000
+    });
   };
 
   // 1. Try Official Support Gmail (supportrongilarup@gmail.com) if App Password is provided
   if (primaryPass) {
     try {
-      const primaryTransporter = nodemailer.createTransport({
-        service: "gmail",
-        auth: {
-          user: primaryUser,
-          pass: primaryPass
-        },
-        connectionTimeout: 4000,
-        greetingTimeout: 4000,
-        socketTimeout: 4000
-      });
-      await sendWithTimeout(primaryTransporter, {
-        from: `"রঙিলা রূপ কিডস" <${primaryUser}>`,
-        replyTo: primaryUser,
-        to: params.to,
-        subject: params.subject,
-        html: params.html,
-        text: params.text
-      });
+      const primaryTransporter = createTransporter(primaryUser, primaryPass, 465, true);
+      await Promise.race([
+        primaryTransporter.sendMail({
+          from: `"রঙিলা রূপ কিডস" <${primaryUser}>`,
+          replyTo: primaryUser,
+          to: params.to,
+          subject: params.subject,
+          html: params.html,
+          text: params.text
+        }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Email delivery timed out")), timeoutMs))
+      ]);
       console.log(`[EMAIL] Delivered email to ${params.to} using official sender ${primaryUser}`);
       return { success: true, senderUsed: primaryUser };
     } catch (primaryErr: any) {
-      console.warn(`[EMAIL] Official sender (${primaryUser}) failed (${primaryErr?.message}), switching to authenticated relay...`);
+      console.warn(`[EMAIL] Official sender (${primaryUser}) port 465 failed (${primaryErr?.message}), trying port 587...`);
+      try {
+        const primary587 = createTransporter(primaryUser, primaryPass, 587, false);
+        await primary587.sendMail({
+          from: `"রঙিলা রূপ কিডস" <${primaryUser}>`,
+          replyTo: primaryUser,
+          to: params.to,
+          subject: params.subject,
+          html: params.html,
+          text: params.text
+        });
+        return { success: true, senderUsed: primaryUser };
+      } catch (err587: any) {
+        console.warn(`[EMAIL] Official sender (${primaryUser}) port 587 also failed, switching to authenticated relay...`);
+      }
     }
   }
 
   // 2. Fallback to Authenticated Relay (sends with official support sender name & reply-to)
   if (relayPass) {
     try {
-      const relayTransporter = nodemailer.createTransport({
-        service: "gmail",
-        auth: {
-          user: relayUser,
-          pass: relayPass
-        },
-        connectionTimeout: 4000,
-        greetingTimeout: 4000,
-        socketTimeout: 4000
-      });
-      await sendWithTimeout(relayTransporter, {
-        from: `"রঙিলা রূপ কিডস" <${OFFICIAL_SUPPORT_EMAIL}>`,
-        replyTo: OFFICIAL_SUPPORT_EMAIL,
-        to: params.to,
-        subject: params.subject,
-        html: params.html,
-        text: params.text
-      });
-      console.log(`[EMAIL] Delivered email to ${params.to} via authenticated relay (${relayUser}) from ${OFFICIAL_SUPPORT_EMAIL}`);
+      const relayTransporter = createTransporter(relayUser, relayPass, 465, true);
+      await Promise.race([
+        relayTransporter.sendMail({
+          from: `"রঙিলা রূপ কিডস" <${OFFICIAL_SUPPORT_EMAIL}>`,
+          replyTo: OFFICIAL_SUPPORT_EMAIL,
+          to: params.to,
+          subject: params.subject,
+          html: params.html,
+          text: params.text
+        }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Email delivery timed out")), timeoutMs))
+      ]);
+      console.log(`[EMAIL] Delivered email to ${params.to} via authenticated relay (${relayUser})`);
       return { success: true, senderUsed: relayUser };
     } catch (relayErr: any) {
-      console.error(`[EMAIL] Relay send error:`, relayErr?.message);
-      return { success: false, error: relayErr?.message || "Failed to deliver email" };
+      console.warn(`[EMAIL] Relay port 465 failed (${relayErr?.message}), trying port 587...`);
+      try {
+        const relay587 = createTransporter(relayUser, relayPass, 587, false);
+        await relay587.sendMail({
+          from: `"রঙিলা রূপ কিডস" <${OFFICIAL_SUPPORT_EMAIL}>`,
+          replyTo: OFFICIAL_SUPPORT_EMAIL,
+          to: params.to,
+          subject: params.subject,
+          html: params.html,
+          text: params.text
+        });
+        return { success: true, senderUsed: relayUser };
+      } catch (err2: any) {
+        console.error(`[EMAIL] Relay send error:`, err2?.message);
+        return { success: false, error: err2?.message || "Failed to deliver email" };
+      }
     }
   }
 
@@ -335,27 +358,162 @@ async function startServer() {
       if (!sendRes.success) {
         console.warn("[ADMIN SECURITY] Email delivery failed or slow:", sendRes.error);
         return res.json({
-          success: true,
+          success: false,
           emailSent: false,
-          fallbackOtp: otpCode,
           target: input,
-          expiresInMinutes: 10,
-          message: `⚠️ ইমেইল সংযোগ বিলম্বিত। সরাসরি আপনার OTP কোড: ${otpCode} (কোডটি দিয়ে ভেরিফাই করুন)`
+          message: `⚠️ আপনার জি-মেইলে (${emailTarget}) ওটিপি পাঠানো সম্ভব হয়নি (${sendRes.error || 'সংযোগ বিলম্বিত'})। কোনো ডেমো কোড দিয়ে লগইন করা যাবে না। অনুগ্রহ করে 'মাস্টার পাসকোড' ট্যাবে ক্লিক করে অনার পাসকোড (142536 অথবা 01792765693) দিয়ে লগইন করুন।`
         });
       }
 
       return res.json({
         success: true,
         emailSent: true,
-        fallbackOtp: otpCode,
         target: input,
         expiresInMinutes: 10,
-        message: `✅ আপনার জি-মেইল (${emailTarget})-এ আসল OTP কোড পাঠিয়ে দেওয়া হয়েছে! ইনবক্স অথবা স্প্যাম ফোল্ডার চেক করুন।`
+        message: `✅ আপনার জি-মেইল (${emailTarget})-এ আসল OTP কোড পাঠিয়ে দেওয়া হয়েছে! অনুগ্রহ করে ইনবক্স অথবা স্প্যাম ফোল্ডার চেক করুন।`
       });
 
     } catch (err: any) {
       console.error("Error sending admin OTP:", err);
       return res.status(500).json({ success: false, message: "সার্ভারে সমস্যা হয়েছে। অনুগ্রহ করে অনার মাস্টার পাসকোড (01792765693 বা 142536) দিয়ে সরাসরি প্রবেশ করুন।" });
+    }
+  });
+
+  // 1.1 Admin Staff Invitation & Gmail Activation
+  const ADMIN_INVITES_FILE = path.join(process.cwd(), 'data', 'admin_invites.json');
+  const readInvites = (): any[] => {
+    try {
+      if (fs.existsSync(ADMIN_INVITES_FILE)) {
+        return JSON.parse(fs.readFileSync(ADMIN_INVITES_FILE, 'utf-8'));
+      }
+    } catch (e) {}
+    return [];
+  };
+  const writeInvites = (invites: any[]) => {
+    try {
+      const dir = path.dirname(ADMIN_INVITES_FILE);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(ADMIN_INVITES_FILE, JSON.stringify(invites, null, 2), 'utf-8');
+    } catch (e) {}
+  };
+
+  app.post("/api/admin/invite", async (req, res) => {
+    try {
+      const { name, email, phone, role } = req.body;
+      if (!email || !String(email).includes('@')) {
+        return res.status(400).json({ success: false, message: "সঠিক জি-মেইল ঠিকানা প্রদান করুন।" });
+      }
+
+      const cleanEmail = String(email).trim().toLowerCase();
+      const token = Math.random().toString(36).substring(2) + Date.now().toString(36);
+      const invites = readInvites();
+
+      const newInvite = {
+        id: `inv-${Date.now()}`,
+        name: name || "Admin Staff",
+        email: cleanEmail,
+        phone: phone || "",
+        role: role || "Manager",
+        token,
+        status: "pending",
+        createdAt: Date.now()
+      };
+
+      const existingIdx = invites.findIndex(i => i.email === cleanEmail);
+      if (existingIdx >= 0) {
+        invites[existingIdx] = newInvite;
+      } else {
+        invites.push(newInvite);
+      }
+      writeInvites(invites);
+
+      const host = req.get('host') || 'localhost:3000';
+      const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+      const activateLink = `${protocol}://${host}/#admin-activate?token=${token}&email=${encodeURIComponent(cleanEmail)}`;
+
+      // Send Real Activation Email to the Staff Gmail
+      const emailRes = await sendRongilaRupEmail({
+        to: cleanEmail,
+        subject: `🎉 রঙিলা রূপ কিডস - এডমিন স্টাফ একাউন্ট অ্যাক্টিভেশন আমন্ত্রণ`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #fffaf0; border: 2px solid #b45309; border-radius: 16px; overflow: hidden;">
+            <div style="background: #4c0519; padding: 24px; text-align: center;">
+              <h1 style="color: #fef08a; margin: 0; font-size: 24px;">রঙিলা রূপ কিডস</h1>
+              <p style="color: #fbcfe8; margin: 6px 0 0 0; font-size: 13px;">এডমিন প্যানেল একাউন্ট সিকিউরিটি অ্যাক্টিভেশন</p>
+            </div>
+            <div style="padding: 30px 24px; text-align: center;">
+              <p style="font-size: 16px; color: #1c1917; font-weight: bold;">
+                আসসালামু আলাইকুম ${name},
+              </p>
+              <p style="font-size: 14px; color: #44403c; line-height: 1.6;">
+                আপনাকে <strong>রঙিলা রূপ কিডস</strong> এডমিন প্যানেলের <strong>${role}</strong> হিসেবে যুক্ত করা হয়েছে।<br/>
+                আপনার এডমিন এক্সেস কার্যকর ও একটিভ করতে নিচের বাটনে ক্লিক করুন:
+              </p>
+              <div style="margin: 25px 0;">
+                <a href="${activateLink}" style="background: #be123c; color: #ffffff; padding: 14px 28px; text-decoration: none; font-size: 15px; font-weight: bold; border-radius: 12px; display: inline-block; box-shadow: 0 4px 12px rgba(190,18,60,0.3);">
+                  ✅ একাউন্ট সক্রিয় করুন (Active Account Now)
+                </a>
+              </div>
+              <p style="font-size: 12px; color: #78716c; margin-top: 15px;">
+                বাটনে কাজ না করলে সরাসরি এই লিংকে ক্লিক করুন:<br/>
+                <a href="${activateLink}" style="color: #b45309; word-break: break-all;">${activateLink}</a>
+              </p>
+            </div>
+            <div style="background: #f5f5f4; padding: 16px; text-align: center; font-size: 11px; color: #a8a29e;">
+              রঙিলা রূপ কিডস • ওনার: আতাউর রহমান (01792765693)
+            </div>
+          </div>
+        `,
+        text: `রঙিলা রূপ কিডস এডমিন অ্যাক্টিভেশন লিংক: ${activateLink}`
+      });
+
+      res.json({
+        success: true,
+        emailSent: emailRes.success,
+        token,
+        activateLink,
+        message: emailRes.success
+          ? `✅ ${cleanEmail} ঠিকানায় অ্যাক্টিভেশন ইমেইল পাঠানো হয়েছে! তিনি তার জি-মেইল থেকে 'Active' করলেই এডমিন এক্সেস কার্যকর হবে।`
+          : `✅ ইনভাইটেশন তৈরি হয়েছে। সংযোগ বিলম্বিত হলে সরাসরি অ্যাক্টিভেশন লিংক: ${activateLink}`
+      });
+    } catch (e: any) {
+      console.error("Admin invite error:", e);
+      res.status(500).json({ success: false, message: e.message || "Failed to send invite" });
+    }
+  });
+
+  // 1.2 Activate Admin Account
+  app.post("/api/admin/activate", (req, res) => {
+    try {
+      const { token, email } = req.body;
+      const cleanEmail = String(email || '').trim().toLowerCase();
+      const invites = readInvites();
+      const target = invites.find(i => (token && i.token === token) || (cleanEmail && i.email === cleanEmail));
+
+      if (!target) {
+        return res.status(404).json({ success: false, message: "অ্যাক্টিভেশন টোকেনটি সঠিক নয় বা ইতিমধ্যে কার্যকর হয়েছে।" });
+      }
+
+      target.status = "Active";
+      target.activatedAt = Date.now();
+      writeInvites(invites);
+
+      if (!AUTHORIZED_ADMIN_EMAILS.includes(target.email)) {
+        AUTHORIZED_ADMIN_EMAILS.push(target.email);
+      }
+
+      res.json({
+        success: true,
+        adminUser: {
+          name: target.name,
+          email: target.email,
+          phone: target.phone,
+          role: target.role
+        },
+        message: `🎉 অভিনন্দন ${target.name}! আপনার এডমিন অ্যাকাউন্ট সফলভাবে অ্যাক্টিভ হয়েছে। এখন আপনি ওটিপি দিয়ে এডমিনে প্রবেশ করতে পারবেন।`
+      });
+    } catch (e: any) {
+      res.status(500).json({ success: false, message: "অ্যাক্টিভেশনে ত্রুটি হয়েছে।" });
     }
   });
 
@@ -425,20 +583,18 @@ async function startServer() {
       if (!sendRes.success) {
         console.warn("[CUSTOMER AUTH] Email send failed or slow:", sendRes.error);
         return res.json({
-          success: true,
+          success: false,
           emailSent: false,
-          fallbackOtp: otpCode,
           email: cleanEmail,
-          message: `⚠️ ইমেইল সংযোগ বিলম্বিত। সরাসরি আপনার OTP কোড: ${otpCode} (কোডটি বক্সে লিখুন)`
+          message: `⚠️ ইমেইল সংযোগ বিলম্বিত (${sendRes.error || 'ব্যর্থ'})। অনুগ্রহ করে সঠিক জি-মেইল চেক করুন বা পুনরায় চেষ্টা করুন।`
         });
       }
 
       return res.json({
         success: true,
         emailSent: true,
-        fallbackOtp: otpCode,
         email: cleanEmail,
-        message: `✅ আপনার জি-মেইল (${cleanEmail})-এ ৬-সংখ্যার OTP পাঠানো হয়েছে! আপনার ইনবক্স অথবা স্প্যাম ফোল্ডার চেক করুন।`
+        message: `✅ আপনার জি-মেইল (${cleanEmail})-এ ৬-সংখ্যার আসল OTP পাঠানো হয়েছে! আপনার ইনবক্স অথবা স্প্যাম ফোল্ডার চেক করুন।`
       });
 
     } catch (err: any) {
@@ -1043,18 +1199,116 @@ CRITICAL CONVERSATIONAL RULES:
       const idx = orders.findIndex(o => o.id === id);
 
       if (idx >= 0) {
-        orders[idx] = { ...orders[idx], ...updates };
+        orders[idx] = {
+          ...orders[idx],
+          ...updates,
+          items: (Array.isArray(updates.items) && updates.items.length > 0) ? updates.items : orders[idx].items,
+          customerName: updates.customerName || orders[idx].customerName,
+          phone: updates.phone || orders[idx].phone,
+          address: updates.address || orders[idx].address,
+          totalAmount: Number(updates.totalAmount) > 0 ? Number(updates.totalAmount) : orders[idx].totalAmount
+        };
         writeOrdersToFile(orders);
         res.json({ success: true, order: orders[idx] });
       } else {
-        // If not found in file, create it with updates
-        const created = { id, ...updates };
-        orders.unshift(created);
-        writeOrdersToFile(orders);
-        res.json({ success: true, order: created });
+        // If not found in file, only create if complete order data is present to prevent blank hollow entries
+        if (updates.customerName || (Array.isArray(updates.items) && updates.items.length > 0) || Number(updates.totalAmount) > 0) {
+          const created = { id, items: [], totalAmount: 0, ...updates };
+          orders.unshift(created);
+          writeOrdersToFile(orders);
+          res.json({ success: true, order: created });
+        } else {
+          res.json({ success: true, message: "Partial status update noted without overwriting" });
+        }
       }
     } catch (err: any) {
       res.status(500).json({ error: "Failed to update order" });
+    }
+  });
+
+  // ------------------------------------------------------------------
+  // Products Real-time Server Persistence
+  // ------------------------------------------------------------------
+  const PRODUCTS_FILE_PATH = path.join(process.cwd(), 'data', 'products_store.json');
+
+  const readProductsFromFile = (): any[] => {
+    try {
+      if (fs.existsSync(PRODUCTS_FILE_PATH)) {
+        const raw = fs.readFileSync(PRODUCTS_FILE_PATH, 'utf-8');
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {
+      console.error('Error reading products file:', e);
+    }
+    return [];
+  };
+
+  const writeProductsToFile = (products: any[]) => {
+    try {
+      const dataDir = path.join(process.cwd(), 'data');
+      if (!fs.existsSync(dataDir)) {
+        fs.mkdirSync(dataDir, { recursive: true });
+      }
+      fs.writeFileSync(PRODUCTS_FILE_PATH, JSON.stringify(products, null, 2), 'utf-8');
+    } catch (e) {
+      console.error('Error writing products file:', e);
+    }
+  };
+
+  // 1. Get products
+  app.get("/api/products", (_req, res) => {
+    const products = readProductsFromFile();
+    res.json({ success: true, products });
+  });
+
+  // 2. Save / Update product
+  app.post("/api/products", (req, res) => {
+    try {
+      const item = req.body;
+      if (!item || !item.id) {
+        return res.status(400).json({ error: "Invalid product" });
+      }
+      const products = readProductsFromFile();
+      const idx = products.findIndex(p => p.id === item.id);
+      if (idx >= 0) {
+        products[idx] = { ...products[idx], ...item };
+      } else {
+        products.unshift(item);
+      }
+      writeProductsToFile(products);
+      res.json({ success: true, product: item });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message || "Failed to save product" });
+    }
+  });
+
+  // 3. Delete product
+  app.delete("/api/products/:id", (req, res) => {
+    try {
+      const { id } = req.params;
+      let products = readProductsFromFile();
+      products = products.filter(p => p.id !== id);
+      writeProductsToFile(products);
+      res.json({ success: true, message: "Product deleted" });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message || "Failed to delete product" });
+    }
+  });
+
+  // 4. Clean non-kids / saree products
+  app.post("/api/products/clean-non-kids", (_req, res) => {
+    try {
+      let products = readProductsFromFile();
+      const initialCount = products.length;
+      products = products.filter(p => {
+        const text = `${p.category || ''} ${p.nameBn || ''} ${p.nameEn || ''}`.toLowerCase();
+        return !text.includes('saree') && !text.includes('শাড়ি') && !text.includes('শাড়ি');
+      });
+      writeProductsToFile(products);
+      res.json({ success: true, cleaned: initialCount - products.length, remaining: products.length });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message || "Failed to clean products" });
     }
   });
 

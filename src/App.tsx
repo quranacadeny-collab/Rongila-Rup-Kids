@@ -304,6 +304,32 @@ export default function App() {
       setTrackOrderIdParam(orderId);
       setIsTrackOrderOpen(true);
     }
+
+    // Check for admin activation link
+    const hash = window.location.hash || '';
+    const isActivate = hash.includes('admin-activate') || urlParams.get('adminInvite') || urlParams.get('activateToken');
+    if (isActivate) {
+      const token = urlParams.get('token') || urlParams.get('adminInvite') || urlParams.get('activateToken') || (hash.split('token=')[1] ? hash.split('token=')[1].split('&')[0] : '');
+      const email = urlParams.get('email') || (hash.split('email=')[1] ? decodeURIComponent(hash.split('email=')[1].split('&')[0]) : '');
+
+      if (token || email) {
+        fetch('/api/admin/activate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, email })
+        })
+          .then(res => res.json())
+          .then(data => {
+            if (data.success) {
+              sessionStorage.setItem('rr_admin_token', 'staff_activated_' + Date.now());
+              alert(data.message || '🎉 আপনার এডমিন অ্যাকাউন্ট সফলভাবে অ্যাক্টিভ হয়েছে!');
+              setIsAdminOpen(true);
+              window.history.replaceState({}, document.title, window.location.pathname);
+            }
+          })
+          .catch(err => console.error('Admin activation error:', err));
+      }
+    }
   }, [products]);
 
   // Comparison Handlers

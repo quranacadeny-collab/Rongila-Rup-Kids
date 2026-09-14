@@ -112,6 +112,7 @@ export interface Customer {
   name: string;
   phone: string;
   email?: string;
+  avatar?: string;
   address: string;
   city: string;
   totalOrders: number;
@@ -126,11 +127,14 @@ export interface AdminUser {
   email: string;
   phone: string;
   role: 'Super Admin' | 'Store Manager' | 'Order Specialist' | 'Editor';
-  status: 'Active' | 'Inactive';
+  status: 'Active' | 'Inactive' | 'Pending Activation';
+  profilePic?: string;
   lastLogin?: string;
+  inviteToken?: string;
 }
 
 export interface StoreSettings {
+  adminProfilePic?: string;
   storeNameBn?: string;
   storeNameEn?: string;
   phone?: string;

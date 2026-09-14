@@ -383,26 +383,68 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     role: 'Store Manager'
   });
 
-  const handleAddAdminUser = (e: React.FormEvent) => {
+  const handleAddAdminUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newAdmin.name.trim() || !newAdmin.phone.trim() || !newAdmin.email.trim()) {
       alert(lang === 'bn' ? 'দয়া করে স্টাফের নাম, ফোন এবং জি-মেইল অ্যাড্রেস পূরণ করুন' : 'Please provide staff name, phone and email address');
       return;
     }
-    const created: AdminUser = {
-      id: 'u_' + Date.now(),
-      name: newAdmin.name.trim(),
-      email: newAdmin.email.trim(),
-      phone: newAdmin.phone.trim(),
-      role: newAdmin.role,
-      status: 'Active',
-      lastLogin: 'Never'
-    };
-    const updated = [...adminUsers, created];
-    setAdminUsers(updated);
-    localStorage.setItem('rr_admin_users', JSON.stringify(updated));
-    setNewAdmin({ name: '', email: '', phone: '', role: 'Store Manager' });
-    alert(lang === 'bn' ? `✅ ${created.name} (${created.role}) সফলভাবে যোগ করা হয়েছে!` : `✅ ${created.name} added successfully!`);
+
+    try {
+      const resp = await fetch('/api/admin/invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newAdmin.name.trim(),
+          email: newAdmin.email.trim(),
+          phone: newAdmin.phone.trim(),
+          role: newAdmin.role
+        })
+      });
+      const data = await resp.json();
+
+      const created: AdminUser = {
+        id: 'u_' + Date.now(),
+        name: newAdmin.name.trim(),
+        email: newAdmin.email.trim().toLowerCase(),
+        phone: newAdmin.phone.trim(),
+        role: newAdmin.role,
+        status: data.emailSent ? 'Active' : 'Pending Activation',
+        inviteToken: data.token,
+        lastLogin: 'Never'
+      };
+      const updated = [...adminUsers, created];
+      setAdminUsers(updated);
+      localStorage.setItem('rr_admin_users', JSON.stringify(updated));
+      setNewAdmin({ name: '', email: '', phone: '', role: 'Store Manager' });
+
+      if (data.activateLink) {
+        setStaffInviteModal({
+          name: created.name,
+          email: created.email,
+          inviteLink: data.activateLink
+        });
+      }
+
+      alert(lang === 'bn'
+        ? (data.message || `✅ ${created.name} (${created.role}) সফলভাবে আমন্ত্রণ পাঠানো হয়েছে!`)
+        : `✅ Invitation sent to ${created.email}!`);
+    } catch (err: any) {
+      const created: AdminUser = {
+        id: 'u_' + Date.now(),
+        name: newAdmin.name.trim(),
+        email: newAdmin.email.trim(),
+        phone: newAdmin.phone.trim(),
+        role: newAdmin.role,
+        status: 'Active',
+        lastLogin: 'Never'
+      };
+      const updated = [...adminUsers, created];
+      setAdminUsers(updated);
+      localStorage.setItem('rr_admin_users', JSON.stringify(updated));
+      setNewAdmin({ name: '', email: '', phone: '', role: 'Store Manager' });
+      alert(lang === 'bn' ? `✅ ${created.name} (${created.role}) যোগ করা হয়েছে!` : `✅ ${created.name} added!`);
+    }
   };
 
   const handleRemoveAdminUser = (userId: string, userName: string) => {
@@ -436,7 +478,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       setAdminUsers(updated);
       localStorage.setItem('rr_admin_users', JSON.stringify(updated));
 
-      const inviteLink = `${window.location.origin}${window.location.pathname}?adminInvite=${inviteToken}&email=${encodeURIComponent(created.email)}`;
+      const inviteLink = `${window.location.origin}${window.location.pathname}#admin-activate?token=${inviteToken}&email=${encodeURIComponent(created.email)}`;
       setStaffInviteModal({
         name: created.name,
         email: created.email,
@@ -452,8 +494,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   // Local Form State for Store Settings
   const [settingsForm, setSettingsForm] = useState<StoreSettings>(() => storeSettings || {
-    storeNameBn: 'রঙিলা রূপ - ঐতিহ্যবাহী বুটিক কালেকশন',
-    storeNameEn: 'Rongila Rup Heritage Ethnic Boutique',
+    storeNameBn: 'রঙিলা রূপ কিডস - প্রিমিয়াম বেবি ও কিডস কালেকশন',
+    storeNameEn: 'Rongila Rup Kids - Premium Baby & Kids Boutique',
     phone: '01792765693',
     email: 'supportrongilarup@gmail.com',
     addressBn: 'হাউজ ১২, রোড ৫, ধানমন্ডি, ঢাকা ১২০৫',
@@ -461,8 +503,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     topAnnouncementEn: 'Special Offer: 20% OFF with "RONGILA20"! Cash on Delivery All Over Bangladesh',
     announcementBn: 'স্পেশাল অফার: "RONGILA20" কুপনে ২০% ছাড়! সারাদেশে ক্যাশ অন ডেলিভারি',
     announcementEn: 'Special Offer: 20% OFF with "RONGILA20"! Cash on Delivery All Over Bangladesh',
-    heroBadgeBn: 'প্রিমিয়াম দেশীয় ফ্যাশন ও এথনিক কালেকশন ২০২৬',
-    heroBadgeEn: 'Premium Heritage & Ethnic Boutique Collection 2026',
+    heroBadgeBn: 'প্রিমিয়াম বেবি ও কিডস ফ্যাশন কালেকশন ২০২৬',
+    heroBadgeEn: 'Premium Baby & Kids Fashion Collection 2026',
     discountCouponCode: 'RONGILA20',
     discountPercent: 20,
     shippingInsideDhaka: 80,

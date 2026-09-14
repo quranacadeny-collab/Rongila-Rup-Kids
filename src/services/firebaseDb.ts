@@ -35,12 +35,19 @@ export const subscribeProducts = (
             createdAt: safeCreated || (1680000000000 - idx * 100000)
           } as Product;
         });
-        prods.sort((a, b) => {
+
+        // Filter out any legacy saree items that may have been previously seeded to Firestore
+        const kidsOnly = prods.filter(p => {
+          const text = `${p.category || ''} ${p.nameBn || ''} ${p.nameEn || ''}`.toLowerCase();
+          return !text.includes('saree') && !text.includes('শাড়ি') && !text.includes('শাড়ি');
+        });
+
+        kidsOnly.sort((a, b) => {
           const timeA = getSafeTimestamp(a.createdAt);
           const timeB = getSafeTimestamp(b.createdAt);
           return timeB - timeA;
         });
-        callback(prods);
+        callback(kidsOnly);
       } else {
         callback([]);
       }
@@ -54,6 +61,15 @@ export const subscribeProducts = (
 
 // Save or Update Product in Firestore
 export const saveProductToFirestore = async (product: Product): Promise<void> => {
+  // Sync with Server API store
+  try {
+    fetch('/api/products', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(product)
+    }).catch(err => console.warn('Server product save warning:', err));
+  } catch (e) {}
+
   try {
     const docRef = doc(db, COLLECTIONS.PRODUCTS, product.id);
     const createdTimestamp = product.createdAt ? getSafeTimestamp(product.createdAt) : Date.now();
@@ -70,6 +86,13 @@ export const saveProductToFirestore = async (product: Product): Promise<void> =>
 
 // Delete Product from Firestore
 export const deleteProductFromFirestore = async (productId: string): Promise<void> => {
+  // Sync with Server API store
+  try {
+    fetch(`/api/products/${encodeURIComponent(productId)}`, {
+      method: 'DELETE'
+    }).catch(err => console.warn('Server product delete warning:', err));
+  } catch (e) {}
+
   try {
     const docRef = doc(db, COLLECTIONS.PRODUCTS, productId);
     await deleteDoc(docRef);

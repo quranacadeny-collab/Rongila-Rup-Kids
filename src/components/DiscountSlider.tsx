@@ -23,11 +23,21 @@ export const DiscountSlider: React.FC<DiscountSliderProps> = ({
   onAddToCart,
   onQuickView
 }) => {
-  // Filter products that have a discount (originalPrice > price)
-  const discountProducts = products.filter(p => p.originalPrice && p.originalPrice > p.price);
+  // Exclude any legacy saree or non-kid items from previous database state
+  const isKidProduct = (p: Product) => {
+    const text = `${p.category || ''} ${p.nameBn || ''} ${p.nameEn || ''}`.toLowerCase();
+    return !text.includes('saree') && !text.includes('শাড়ি') && !text.includes('শাড়ি');
+  };
+
+  const kidsProducts = products.filter(isKidProduct);
+
+  // Filter products that have a valid discount (originalPrice > price)
+  const discountProducts = kidsProducts.filter(
+    p => p.originalPrice && Number(p.originalPrice) > Number(p.price)
+  );
   
-  // Fallback to top products if none explicitly have originalPrice
-  const displayProducts = discountProducts.length > 0 ? discountProducts : products.slice(0, 5);
+  // Fallback to top baby products if none explicitly have originalPrice
+  const displayProducts = discountProducts.length > 0 ? discountProducts : kidsProducts.slice(0, 5);
 
   const [currentIndex, setCurrentIndex] = useState(0);
 
@@ -42,10 +52,16 @@ export const DiscountSlider: React.FC<DiscountSliderProps> = ({
 
   if (displayProducts.length === 0) return null;
 
-  const currentProduct = displayProducts[currentIndex];
-  const discountPercent = currentProduct.originalPrice 
-    ? Math.round(((currentProduct.originalPrice - currentProduct.price) / currentProduct.originalPrice) * 100)
-    : 20;
+  const currentProduct = displayProducts[currentIndex] || displayProducts[0];
+  const hasDiscount = Boolean(
+    currentProduct?.originalPrice && Number(currentProduct.originalPrice) > Number(currentProduct.price)
+  );
+  const savingsAmount = hasDiscount
+    ? Math.max(0, Number(currentProduct.originalPrice) - Number(currentProduct.price))
+    : 0;
+  const discountPercent = hasDiscount
+    ? Math.round((savingsAmount / Number(currentProduct.originalPrice)) * 100)
+    : 15;
 
   const handlePrev = () => {
     setCurrentIndex(prev => (prev - 1 + displayProducts.length) % displayProducts.length);
@@ -135,14 +151,16 @@ export const DiscountSlider: React.FC<DiscountSliderProps> = ({
             <span className="text-xl sm:text-2xl font-mono font-black text-amber-400">
               ৳{currentProduct.price.toLocaleString()}
             </span>
-            {currentProduct.originalPrice && (
+            {hasDiscount && (
               <span className="text-xs font-mono text-stone-400 line-through">
-                ৳{currentProduct.originalPrice.toLocaleString()}
+                ৳{Number(currentProduct.originalPrice).toLocaleString()}
               </span>
             )}
-            <span className="text-[10px] text-emerald-400 font-bold bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/30">
-              {lang === 'bn' ? `সেভ ৳${(currentProduct.originalPrice! - currentProduct.price).toLocaleString()}` : `Save ৳${(currentProduct.originalPrice! - currentProduct.price).toLocaleString()}`}
-            </span>
+            {hasDiscount && savingsAmount > 0 && (
+              <span className="text-[10px] text-emerald-400 font-bold bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/30">
+                {lang === 'bn' ? `সেভ ৳${savingsAmount.toLocaleString()}` : `Save ৳${savingsAmount.toLocaleString()}`}
+              </span>
+            )}
             <span className="text-[10px] text-amber-300 font-semibold bg-amber-950/80 px-2 py-0.5 rounded border border-amber-500/40">
               🚚 {lang === 'bn' ? 'কুরিয়ার ৳৮০/৳১৫০' : 'Courier ৳80/৳150'}
             </span>

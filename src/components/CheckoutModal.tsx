@@ -25,7 +25,7 @@ import {
 import QRCode from 'qrcode';
 import { CartItem, Language, Order } from '../types';
 import { BD_DISTRICTS } from '../data/districts';
-import { printInvoiceElement } from '../utils/printHelper';
+import { printOrderInvoice, openOrderInvoiceInNewTab } from '../utils/printHelper';
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -153,8 +153,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   // Generate real scannable QR Code when order is confirmed
   useEffect(() => {
     if (confirmedOrder) {
-      // Must be a valid full web URL so smartphone cameras immediately offer "Open link in browser"
-      const trackingUrl = `${window.location.origin}/?trackOrder=${encodeURIComponent(confirmedOrder.id)}`;
+      // Must be a valid web URL so any smartphone camera or QR scanner immediately recognizes and opens it
+      const baseOrigin = (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')
+        ? window.location.origin
+        : 'https://rongila-rup.firebaseapp.com';
+      const trackingUrl = `${baseOrigin}/?trackOrder=${encodeURIComponent(confirmedOrder.id)}`;
+      
       QRCode.toDataURL(trackingUrl, {
         width: 250,
         margin: 1,
@@ -1141,11 +1145,30 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
               <button
                 type="button"
-                onClick={() => printInvoiceElement('printable-area')}
-                className="px-4 py-2.5 rounded-xl bg-amber-500 text-rose-950 text-xs font-bold flex items-center gap-1.5 hover:bg-amber-400 transition-colors cursor-pointer print:hidden no-print"
+                onClick={() => {
+                  if (confirmedOrder) {
+                    printOrderInvoice(confirmedOrder, qrCodeDataUrl, '01792765693');
+                  }
+                }}
+                className="px-4 py-2.5 rounded-xl bg-amber-500 text-rose-950 text-xs font-bold flex items-center gap-1.5 hover:bg-amber-400 transition-colors cursor-pointer print:hidden no-print shadow-xs"
+                title="সরাসরি কম্পিউটারে পরিষ্কার প্রিন্ট ডায়ালগ খুলুন (কখনও ব্ল্যাঙ্ক হবে না)"
               >
                 <Printer size={14} />
                 <span>{lang === 'bn' ? 'ইনভয়েস প্রিন্ট' : 'Print Invoice'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirmedOrder) {
+                    openOrderInvoiceInNewTab(confirmedOrder, qrCodeDataUrl, '01792765693');
+                  }
+                }}
+                className="px-3 py-2.5 rounded-xl bg-stone-200 text-stone-800 text-xs font-bold flex items-center gap-1.5 hover:bg-stone-300 transition-colors cursor-pointer print:hidden no-print"
+                title="নতুন ট্যাবে সম্পূর্ণ পেজে ইনভয়েস দেখুন"
+              >
+                <Receipt size={14} />
+                <span>{lang === 'bn' ? 'নতুন ট্যাবে' : 'New Tab'}</span>
               </button>
 
               <button

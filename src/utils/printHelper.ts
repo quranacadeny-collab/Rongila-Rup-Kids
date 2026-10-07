@@ -812,12 +812,75 @@ export function downloadInvoiceHtml(elementId: string = 'printable-area', invoic
   setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
 }
 
-function openHtmlInTab(html: string) {
-  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-  const blobUrl = URL.createObjectURL(blob);
+/**
+ * Direct print using hidden iframe - 100% reliable inside iframes and all browsers without blank pages or popup blocks
+ */
+export function printInvoiceViaIframe(html: string) {
+  try {
+    const existing = document.getElementById('rr-print-frame');
+    if (existing) {
+      existing.remove();
+    }
 
-  const newWin = window.open(blobUrl, '_blank');
-  if (!newWin) {
+    const iframe = document.createElement('iframe');
+    iframe.id = 'rr-print-frame';
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    iframe.style.zIndex = '-9999';
+    iframe.style.visibility = 'hidden';
+    document.body.appendChild(iframe);
+
+    const frameDoc = iframe.contentDocument || iframe.contentWindow?.document;
+    if (frameDoc) {
+      frameDoc.open();
+      frameDoc.write(html);
+      frameDoc.close();
+      setTimeout(() => {
+        try {
+          iframe.contentWindow?.focus();
+          iframe.contentWindow?.print();
+        } catch (e) {
+          console.warn('Iframe print failed, falling back to new window:', e);
+          openHtmlInTab(html);
+        }
+      }, 350);
+    }
+  } catch (err) {
+    console.error('Print iframe error, opening in tab:', err);
+    openHtmlInTab(html);
+  }
+}
+
+/**
+ * Directly prints the dedicated professional invoice for an Order.
+ */
+export function printOrderInvoice(order: Order, qrCodeUrl: string = '', storePhone?: string) {
+  const html = generateProfessionalInvoiceHtml(order, qrCodeUrl, { phone: storePhone });
+  printInvoiceViaIframe(html);
+}
+
+function openHtmlInTab(html: string) {
+  try {
+    const newWin = window.open('', '_blank');
+    if (newWin && newWin.document) {
+      newWin.document.open();
+      newWin.document.write(html);
+      newWin.document.close();
+      newWin.focus();
+      return;
+    }
+  } catch (e) {
+    console.warn('Direct window.open document.write failed, trying blob:', e);
+  }
+
+  // Fallback: Blob URL
+  try {
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const blobUrl = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = blobUrl;
     a.target = '_blank';
@@ -825,5 +888,8 @@ function openHtmlInTab(html: string) {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+  } catch (err) {
+    printInvoiceViaIframe(html);
   }
 }

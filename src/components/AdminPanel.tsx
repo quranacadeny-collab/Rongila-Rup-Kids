@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import QRCode from 'qrcode';
 import { AdsManagerModal } from './AdsManagerModal';
 import { AdminErrorBoundary } from './AdminErrorBoundary';
@@ -182,21 +182,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   // Local Language Toggle State
   const [currentLang, setCurrentLang] = useState<Language>(lang);
 
-  // Admin Security Authentication State (Email OTP & Master Passcode)
-  // USER MANDATE: "admin panel a jotobar dhukbo login chaibe" -> Require login every time admin opens
-  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
-    try {
-      // Only keep authenticated in the same active browser tab session if explicitly open
-      const token = sessionStorage.getItem('rr_admin_active_session');
-      return !!token;
-    } catch {
-      return false;
-    }
-  });
-  const [adminAuthInput, setAdminAuthInput] = useState('ataurulipur14@gmail.com');
+  // Admin Security Authentication State (Strict Real Gmail OTP Only)
+  // USER MANDATE: Require fresh login every time admin opens
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(false);
+  const [adminAuthInput, setAdminAuthInput] = useState('supportrongilarup@gmail.com');
   const [adminOtpInput, setAdminOtpInput] = useState('');
-  const [adminMasterPassInput, setAdminMasterPassInput] = useState('');
-  const [adminAuthMode, setAdminAuthMode] = useState<'otp' | 'master_pass'>('otp');
   const [otpStep, setOtpStep] = useState<'request' | 'verify'>('request');
   const [isSendingOtp, setIsSendingOtp] = useState(false);
   const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
@@ -204,12 +194,44 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [authError, setAuthError] = useState('');
   const [authSuccessMsg, setAuthSuccessMsg] = useState('');
 
-  // Sync session token while admin panel remains open in current tab
-  useEffect(() => {
-    if (isAdminAuthenticated) {
-      sessionStorage.setItem('rr_admin_active_session', 'active_' + Date.now());
+  // Login Screen Email SMTP Config State
+  const [showLoginEmailSettings, setShowLoginEmailSettings] = useState(false);
+  const [loginSenderEmail, setLoginSenderEmail] = useState('ataurulipur14@gmail.com');
+  const [loginAppPassword, setLoginAppPassword] = useState('');
+  const [loginEmailTesting, setLoginEmailTesting] = useState(false);
+  const [loginEmailStatus, setLoginEmailStatus] = useState<{ success: boolean; message: string } | null>(null);
+
+  const handleSaveLoginEmailSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!loginAppPassword.trim()) {
+      setLoginEmailStatus({ success: false, message: 'অনুগ্রহ করে ১৬ অক্ষরের গুগল অ্যাপ পাসওয়ার্ড লিখুন।' });
+      return;
     }
-  }, [isAdminAuthenticated]);
+    setLoginEmailTesting(true);
+    setLoginEmailStatus(null);
+    try {
+      const res = await fetch('/api/admin/email-settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: loginSenderEmail.trim(),
+          appPassword: loginAppPassword.trim()
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setLoginEmailStatus({ success: false, message: data.message || 'গুগল অ্যাপ পাসওয়ার্ড অথেন্টিকেশন ব্যর্থ হয়েছে।' });
+        return;
+      }
+      setLoginEmailStatus({ success: true, message: '✅ গুগল মেইল সফলভাবে কানেক্ট হয়েছে! এখন "জি-মেইলে আসল OTP কোড পাঠান" বাটনে ক্লিক করুন।' });
+      setAuthError('');
+      setLoginAppPassword('');
+    } catch (err: any) {
+      setLoginEmailStatus({ success: false, message: 'সার্ভার সংযোগে ত্রুটি হয়েছে।' });
+    } finally {
+      setLoginEmailTesting(false);
+    }
+  };
 
   // Staff Addition OTP Modal & Activation Link State
   const [pendingStaffOtp, setPendingStaffOtp] = useState<{
@@ -222,6 +244,34 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   // Customer List Tab Filter: 'all' | 'top'
   const [customerTabFilter, setCustomerTabFilter] = useState<'all' | 'top'>('all');
+
+  // Owner Admin Avatar Profile State (USER MANDATE: admin profile a amar nijer pic jeno dite pari)
+  const [adminAvatar, setAdminAvatar] = useState<string>(() => {
+    try {
+      return localStorage.getItem('rr_admin_avatar') || '';
+    } catch {
+      return '';
+    }
+  });
+  const adminAvatarInputRef = useRef<HTMLInputElement>(null);
+
+  const handleAdminAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      alert(lang === 'bn' ? 'ছবির সাইজ সর্বোচ্চ ৫ মেগাবাইট হতে হবে।' : 'Image size must be under 5MB.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      setAdminAvatar(dataUrl);
+      try {
+        localStorage.setItem('rr_admin_avatar', dataUrl);
+      } catch {}
+    };
+    reader.readAsDataURL(file);
+  };
 
   // Active Tab corresponding to user's 6 main request areas:
   // 1. 'dashboard' (Overview Stats, Daily/Weekly/Monthly Sales Reports, Activity Feed)
@@ -376,6 +426,33 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     ];
   });
 
+  // Sync server activation status
+  useEffect(() => {
+    fetch('/api/admin/invites')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && Array.isArray(data.invites)) {
+          setAdminUsers(prev => {
+            let changed = false;
+            const updated = prev.map(u => {
+              const inv = data.invites.find((i: any) => i.email === u.email.toLowerCase());
+              if (inv && inv.status === 'Active' && u.status !== 'Active') {
+                changed = true;
+                return { ...u, status: 'Active' as const };
+              }
+              return u;
+            });
+            if (changed) {
+              localStorage.setItem('rr_admin_users', JSON.stringify(updated));
+              return updated;
+            }
+            return prev;
+          });
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   const [newAdmin, setNewAdmin] = useState<{ name: string; email: string; phone: string; role: AdminUser['role'] }>({
     name: '',
     email: '',
@@ -409,7 +486,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         email: newAdmin.email.trim().toLowerCase(),
         phone: newAdmin.phone.trim(),
         role: newAdmin.role,
-        status: data.emailSent ? 'Active' : 'Pending Activation',
+        status: 'Pending Activation', // Strictly starts as Pending Activation until staff activates from Gmail!
         inviteToken: data.token,
         lastLogin: 'Never'
       };
@@ -1063,7 +1140,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setAuthSuccessMsg('');
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 6000);
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
 
       const res = await fetch('/api/admin/send-otp', {
         method: 'POST',
@@ -1082,52 +1159,29 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       if (res.ok && data?.success) {
         setOtpEmailSent(Boolean(data.emailSent));
         setOtpStep('verify');
-        setAuthSuccessMsg(data.message || 'OTP কোড পাঠানো হয়েছে!');
-        if (data.fallbackOtp) {
-          setAdminOtpInput(data.fallbackOtp);
-        }
+        setAdminOtpInput('');
+        setAuthSuccessMsg(data.message || 'আপনার জি-মেইলে ৬-ডিজিটের আসল OTP কোড পাঠানো হয়েছে!');
         return;
       }
 
-      if (data && !data.success) {
-        setAuthError(data.message || 'OTP পাঠানো সম্ভব হয়নি। মাস্টার পাসকোড ব্যবহার করুন।');
-        return;
-      }
-
-      // Fast instant fallback
-      const localCode = '142536';
-      setOtpStep('verify');
-      setAdminOtpInput(localCode);
-      setAuthSuccessMsg(`⚠️ ব্যাকআপ ভেরিফিকেশন কোড: ${localCode} (অথবা অনার মাস্টার পাসকোড দিন)`);
+      setAuthError(data?.message || 'OTP পাঠানো সম্ভব হয়নি। ইন্টারনেট সংযোগ ও সঠিক জি-মেইল চেক করে পুনরায় পাঠান।');
     } catch (err: any) {
-      // Fast instant fallback on timeout or network
-      const localCode = '142536';
-      setOtpStep('verify');
-      setAdminOtpInput(localCode);
-      setAuthSuccessMsg(`⚠️ সংযোগ বিলম্বিত হওয়ায় ব্যাকআপ ভেরিফিকেশন কোড: ${localCode} (অথবা মাস্টার পাসকোড দিন)`);
+      setAuthError('সার্ভারে সংযোগ বিলম্বিত হচ্ছে। অনুগ্রহ করে পুনরায় OTP পাঠান বাটনে ক্লিক করুন।');
     } finally {
       setIsSendingOtp(false);
     }
   };
 
-  // Verify Real OTP from Server
+  // Verify Real OTP strictly via Server
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!adminOtpInput.trim()) return;
-    setIsVerifyingOtp(true);
-    setAuthError('');
     const enteredOtp = adminOtpInput.trim();
-
-    // Direct local master pass verification
-    if (['142536', '765693', '01792765693', 'rongilarup2026', '123456'].includes(enteredOtp)) {
-      sessionStorage.setItem('rr_admin_token', 'admin_auth_' + Date.now());
-      setIsAdminAuthenticated(true);
-      setAuthError('');
-      setOtpStep('request');
-      setAdminOtpInput('');
-      setIsVerifyingOtp(false);
+    if (!enteredOtp || enteredOtp.length < 6) {
+      setAuthError('অনুগ্রহ করে জি-মেইলে আসা ৬-ডিজিটের সম্পূর্ণ OTP কোডটি লিখুন।');
       return;
     }
+    setIsVerifyingOtp(true);
+    setAuthError('');
 
     try {
       const res = await fetch('/api/admin/verify-otp', {
@@ -1139,59 +1193,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       try { data = await res.json(); } catch(e) {}
 
       if (!res.ok || !data?.success) {
-        setAuthError(data?.message || 'ভুল OTP কোড! আবার চেষ্টা করুন অথবা অনার মাস্টার পাসকোড দিন।');
+        setAuthError(data?.message || 'ভুল OTP কোড! আপনার জি-মেইলে পাঠানো সঠিক কোডটি দিন।');
         setIsVerifyingOtp(false);
         return;
-      }
-      if (data.sessionToken) {
-        sessionStorage.setItem('rr_admin_token', data.sessionToken);
       }
       setIsAdminAuthenticated(true);
       setAuthError('');
       setOtpStep('request');
       setAdminOtpInput('');
+      setAuthSuccessMsg('সফলভাবে সিকিউরড এডমিন প্যানেলে লগইন সম্পন্ন হয়েছে!');
     } catch (err: any) {
-      setAuthError('ভেরিফিকেশন সম্পন্ন করা সম্ভব হয়নি। অনার মাস্টার পাসকোড ব্যবহার করুন।');
+      setAuthError('ভেরিফিকেশন সম্পন্ন করা সম্ভব হয়নি। ইন্টারনেট সংযোগ চেক করে আবার চেষ্টা করুন।');
     } finally {
       setIsVerifyingOtp(false);
     }
-  };
-
-  // Owner Emergency Master Passcode Login
-  const handleMasterPassLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    const cleanInput = adminAuthInput.trim().toLowerCase();
-    const cleanPass = adminMasterPassInput.trim();
-
-    // Check authorized owner
-    const isOwnerEmail = cleanInput === 'ataurulipur14@gmail.com' || cleanInput === 'supportrongilarup@gmail.com';
-    const isOwnerPhone = cleanInput.replace(/\D/g, '').endsWith('01792765693');
-    const isOwnerUser = cleanInput === 'admin' || isOwnerEmail || isOwnerPhone;
-
-    if (!isOwnerUser) {
-      setAuthError('শুধুমাত্র অনুমোদিত অনার (ataurulipur14@gmail.com / 01792765693) মাস্টার পাসকোড দিয়ে প্রবেশ করতে পারবেন।');
-      return;
-    }
-
-    // Owner Master Passwords
-    const isPassValid = 
-      cleanPass === '01792765693' || 
-      cleanPass === '142536' || 
-      cleanPass === '765693' || 
-      cleanPass === 'rongilarup2026' || 
-      cleanPass === 'rongila1234' ||
-      cleanPass === '123456';
-
-    if (!isPassValid) {
-      setAuthError('ভুল অনার মাস্টার পাসকোড! (সহায়তা: অনারের মোবাইল নম্বর 01792765693 অথবা 142536 দিন)');
-      return;
-    }
-
-    // Authenticated!
-    sessionStorage.setItem('rr_admin_token', 'master_auth_' + Date.now());
-    setIsAdminAuthenticated(true);
-    setAuthError('');
-    setAuthSuccessMsg('স্বাগতম আতাউর রহমান ভাই! সফলভাবে এডমিন প্যানেলে প্রবেশ করেছেন।');
   };
 
   // Admin Logout Handler
@@ -1530,8 +1545,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     return returnOrders.reduce((acc, o) => acc + (Number(o?.totalAmount) || 0), 0);
   }, [returnOrders]);
 
-  // Calculated Stats
-  const totalSales = deliveredSales; // STRICT: Delivered only
+  // Total Sales counts all active valid orders (delivered + confirmed + in pipeline)
+  // When cleared, everything becomes 0!
+  const totalSales = useMemo(() => {
+    return dateFilteredOrders
+      .filter(o => o?.status !== 'cancelled' && (o?.status as string) !== 'returned')
+      .reduce((acc, o) => acc + (Number(o?.totalAmount) || 0), 0);
+  }, [dateFilteredOrders]);
   const totalOrders = dateFilteredOrders.length;
   const pendingOrders = dateFilteredOrders.filter(o => o?.status === 'processing').length;
   const confirmedOrders = dateFilteredOrders.filter(o => o?.status === 'confirmed').length;
@@ -1655,91 +1675,87 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </h4>
               <p className="text-xs text-stone-600 leading-relaxed">
                 {lang === 'bn' 
-                  ? 'অনুমোদিত অনার (ataurulipur14@gmail.com / 01792765693)-এর জন্য নিরাপদ প্রবেশদ্বার।' 
-                  : 'Secure entrance for authorized owner.'}
+                  ? 'অনলাইন শপ ম্যানেজমেন্টের জন্য নিরাপদ প্রবেশদ্বার।' 
+                  : 'Secure entrance for authorized administration.'}
               </p>
-
-              {/* Toggle Login Method */}
-              <div className="flex bg-stone-200/80 p-1 rounded-xl gap-1 text-xs font-bold mt-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAdminAuthMode('otp');
-                    setAuthError('');
-                  }}
-                  className={`flex-1 py-1.5 rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                    adminAuthMode === 'otp' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-600 hover:text-stone-900'
-                  }`}
-                >
-                  <Send size={13} />
-                  <span>{lang === 'bn' ? 'জিমেইল ওটিপি' : 'Gmail OTP'}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAdminAuthMode('master_pass');
-                    setAuthError('');
-                  }}
-                  className={`flex-1 py-1.5 rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                    adminAuthMode === 'master_pass' ? 'bg-amber-500 text-slate-950 shadow-sm font-extrabold' : 'text-stone-600 hover:text-stone-900'
-                  }`}
-                >
-                  <KeyRound size={13} />
-                  <span>{lang === 'bn' ? 'মাস্টার পাসকোড' : 'Master Passcode'}</span>
-                </button>
-              </div>
             </div>
 
             <div className="w-full max-w-sm space-y-4 my-2">
-              {/* MODE 1: MASTER PASSCODE */}
-              {adminAuthMode === 'master_pass' ? (
-                <form onSubmit={handleMasterPassLogin} className="space-y-3.5">
-                  <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200 text-left text-xs space-y-1">
-                    <span className="font-bold text-amber-950 flex items-center gap-1.5">
-                      <Lock size={13} className="text-rose-900" />
-                      <span>অনুমোদিত অনার অ্যাকাউন্ট:</span>
-                    </span>
-                    <p className="text-stone-700 text-[11px]">
-                      আতাউর রহমান • <strong>ataurulipur14@gmail.com</strong> (01792765693)
-                    </p>
-                  </div>
-
+              {/* REAL GMAIL OTP VIA SERVER */}
+              {otpStep === 'request' ? (
+                <form onSubmit={handleRequestOtp} className="space-y-4">
                   <div>
-                    <label className="block text-left text-[11px] font-bold text-stone-700 mb-1">
-                      অনার জিমেইল অথবা ফোন নম্বর:
+                    <label className="block text-left text-xs font-bold text-stone-700 mb-1.5">
+                      অনুমোদিত এডমিন জি-মেইল অ্যাড্রেস:
                     </label>
                     <input
-                      type="text"
+                      type="email"
                       required
                       value={adminAuthInput}
                       onChange={(e) => {
                         setAdminAuthInput(e.target.value);
                         setAuthError('');
                       }}
-                      placeholder="ataurulipur14@gmail.com / 01792765693"
-                      className="w-full px-4 py-3 bg-stone-50 border border-stone-300 rounded-2xl text-center text-sm font-mono font-bold text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-inner"
+                      placeholder="e.g. supportrongilarup@gmail.com"
+                      className="w-full px-4 py-3.5 bg-stone-50 border border-stone-300 rounded-2xl text-center text-sm font-mono font-bold text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-inner"
                     />
+                    {authError && (
+                      <div className="p-2.5 bg-red-50 border border-red-200 rounded-xl mt-2 text-left space-y-1">
+                        <p className="text-[11px] font-bold text-red-700 leading-tight">
+                          ⚠️ {authError}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isSendingOtp}
+                    className="w-full py-3.5 bg-rose-950 hover:bg-rose-900 disabled:bg-stone-400 text-amber-300 font-extrabold text-xs rounded-2xl shadow-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    {isSendingOtp ? (
+                      <>
+                        <RefreshCw size={16} className="animate-spin" />
+                        <span>OTP পাঠানো হচ্ছে...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Send size={16} />
+                        <span>{lang === 'bn' ? 'জি-মেইলে আসল OTP কোড পাঠান' : 'Send Real OTP to Gmail'}</span>
+                      </>
+                    )}
+                  </button>
+                </form>
+              ) : (
+                <form onSubmit={handleVerifyOtp} className="space-y-3.5">
+                  {/* Status Banner */}
+                  <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-2xl text-left text-xs space-y-1">
+                    <div className="font-bold text-emerald-950 flex items-center justify-between">
+                      <span>✉️ জি-মেইলে OTP পাঠানো হয়েছে!</span>
+                      <span className="bg-emerald-700 text-white text-[9px] px-2 py-0.5 rounded-full font-mono font-bold">SENT</span>
+                    </div>
+                    <p className="text-emerald-800 text-[11px] leading-relaxed">
+                      আপনার ইনবক্স অথবা স্প্যাম ফোল্ডারে পাঠানো ৬-ডিজিটের সিকিউরিটি কোডটি দেখে নিচে লিখুন।
+                    </p>
                   </div>
 
                   <div>
                     <label className="block text-left text-[11px] font-bold text-stone-700 mb-1">
-                      অনার মাস্টার পাসকোড / সিকিউরিটি পিন:
+                      জি-মেইল থেকে ৬-ডিজিটের সিকিউরিটি OTP কোড দিন:
                     </label>
                     <input
-                      type="password"
+                      type="text"
+                      maxLength={6}
                       required
                       autoFocus
-                      value={adminMasterPassInput}
+                      value={adminOtpInput}
                       onChange={(e) => {
-                        setAdminMasterPassInput(e.target.value);
+                        setAdminOtpInput(e.target.value);
                         setAuthError('');
                       }}
-                      placeholder="অনারের ফোন নম্বর বা পাসকোড দিন"
-                      className="w-full px-4 py-3 bg-stone-50 border border-stone-300 rounded-2xl text-center text-base font-mono font-black text-rose-950 focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-inner"
+                      placeholder="যেমন: 582910"
+                      className="w-full px-4 py-3 bg-stone-50 border border-stone-300 rounded-2xl text-center text-xl font-mono font-black tracking-widest text-rose-950 focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-inner"
                     />
-                    <div className="flex justify-between items-center mt-1 px-1">
-                      <span className="text-[10px] text-stone-500 font-medium">সহায়তা: অনারের মোবাইল নম্বর (01792765693)</span>
-                    </div>
                     {authError && (
                       <p className="text-[11px] font-bold text-red-600 mt-1 text-left">
                         ⚠️ {authError}
@@ -1747,141 +1763,41 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     )}
                   </div>
 
-                  <button
-                    type="submit"
-                    className="w-full py-3.5 bg-rose-950 hover:bg-rose-900 text-amber-300 font-extrabold text-xs rounded-2xl shadow-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <Unlock size={16} />
-                    <span>{lang === 'bn' ? '🔑 মাস্টার পাসকোড দিয়ে এডমিনে প্রবেশ' : 'Login with Master Passcode'}</span>
-                  </button>
-                </form>
-              ) : (
-                /* MODE 2: REAL GMAIL OTP VIA SERVER */
-                otpStep === 'request' ? (
-                  <form onSubmit={handleRequestOtp} className="space-y-3.5">
-                    <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200 text-left text-xs space-y-1">
-                      <span className="font-bold text-amber-950 flex items-center gap-1.5">
-                        <Lock size={13} className="text-rose-900" />
-                        <span>অনুমোদিত অনার অ্যাকাউন্ট:</span>
-                      </span>
-                      <p className="text-stone-700 text-[11px]">
-                        আতাউর রহমান • <strong>ataurulipur14@gmail.com</strong>
-                      </p>
-                    </div>
-
-                    <div>
-                      <label className="block text-left text-[11px] font-bold text-stone-700 mb-1">
-                        রেজিস্টার্ড জি-মেইল বা ফোন নম্বর:
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={adminAuthInput}
-                        onChange={(e) => {
-                          setAdminAuthInput(e.target.value);
-                          setAuthError('');
-                        }}
-                        placeholder="e.g. ataurulipur14@gmail.com"
-                        className="w-full px-4 py-3 bg-stone-50 border border-stone-300 rounded-2xl text-center text-sm font-mono font-bold text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-inner"
-                      />
-                      {authError && (
-                        <p className="text-[11px] font-bold text-red-600 mt-1 text-left">
-                          ⚠️ {authError}
-                        </p>
-                      )}
-                    </div>
-
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOtpStep('request');
+                        setAuthError('');
+                      }}
+                      className="px-4 py-3 bg-stone-200 hover:bg-stone-300 text-stone-800 font-bold text-xs rounded-2xl cursor-pointer"
+                    >
+                      পুনরায় পাঠান
+                    </button>
                     <button
                       type="submit"
-                      disabled={isSendingOtp}
-                      className="w-full py-3.5 bg-rose-950 hover:bg-rose-900 disabled:bg-stone-400 text-amber-300 font-extrabold text-xs rounded-2xl shadow-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
+                      disabled={isVerifyingOtp}
+                      className="flex-1 py-3.5 bg-rose-950 hover:bg-rose-900 disabled:bg-stone-400 text-amber-300 font-extrabold text-xs rounded-2xl shadow-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
                     >
-                      {isSendingOtp ? (
+                      {isVerifyingOtp ? (
                         <>
                           <RefreshCw size={16} className="animate-spin" />
-                          <span>OTP পাঠানো হচ্ছে...</span>
+                          <span>যাচাই হচ্ছে...</span>
                         </>
                       ) : (
                         <>
-                          <Send size={16} />
-                          <span>{lang === 'bn' ? 'জি-মেইলে আসল OTP কোড পাঠান' : 'Send Real OTP to Gmail'}</span>
+                          <Unlock size={16} />
+                          <span>{lang === 'bn' ? 'ভেরিফাই ও এডমিনে প্রবেশ' : 'Verify & Enter'}</span>
                         </>
                       )}
                     </button>
-                  </form>
-                ) : (
-                  <form onSubmit={handleVerifyOtp} className="space-y-3.5">
-                    {/* Status Banner */}
-                    <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-2xl text-left text-xs space-y-1">
-                      <div className="font-bold text-emerald-950 flex items-center justify-between">
-                        <span>✉️ জি-মেইলে OTP সফলভাবে পাঠানো হয়েছে!</span>
-                        <span className="bg-emerald-700 text-white text-[9px] px-2 py-0.5 rounded-full font-mono font-bold">SENT</span>
-                      </div>
-                      <p className="text-emerald-800 text-[11px] leading-relaxed">
-                        আপনার <strong>{adminAuthInput}</strong> ইনবক্স অথবা স্প্যাম ফোল্ডারে রঙিলা রূপ সিকিউরিটি ইমেইল চেক করে ৬-ডিজিটের কোডটি দিন।
-                      </p>
-                    </div>
-
-                    <div>
-                      <label className="block text-left text-[11px] font-bold text-stone-700 mb-1">
-                        ৬-ডিজিটের সিকিউরিটি OTP কোড:
-                      </label>
-                      <input
-                        type="text"
-                        maxLength={6}
-                        required
-                        autoFocus
-                        value={adminOtpInput}
-                        onChange={(e) => {
-                          setAdminOtpInput(e.target.value);
-                          setAuthError('');
-                        }}
-                        placeholder="যেমন: 582910"
-                        className="w-full px-4 py-3 bg-stone-50 border border-stone-300 rounded-2xl text-center text-xl font-mono font-black tracking-widest text-rose-950 focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-inner"
-                      />
-                      {authError && (
-                        <p className="text-[11px] font-bold text-red-600 mt-1 text-left">
-                          ⚠️ {authError}
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOtpStep('request');
-                          setAuthError('');
-                        }}
-                        className="px-4 py-3 bg-stone-200 hover:bg-stone-300 text-stone-800 font-bold text-xs rounded-2xl cursor-pointer"
-                      >
-                        পুনরায় পাঠান
-                      </button>
-                      <button
-                        type="submit"
-                        disabled={isVerifyingOtp}
-                        className="flex-1 py-3.5 bg-rose-950 hover:bg-rose-900 disabled:bg-stone-400 text-amber-300 font-extrabold text-xs rounded-2xl shadow-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
-                      >
-                        {isVerifyingOtp ? (
-                          <>
-                            <RefreshCw size={16} className="animate-spin" />
-                            <span>যাচাই হচ্ছে...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Unlock size={16} />
-                            <span>{lang === 'bn' ? 'ভেরিফাই ও এডমিনে প্রবেশ' : 'Verify & Enter'}</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </form>
-                )
+                  </div>
+                </form>
               )}
             </div>
 
-            <div className="pt-4 mt-4 border-t border-stone-200 text-[11px] text-stone-500 font-mono text-center">
-              Authorized Owner: <strong className="text-stone-800">Ataur Rahman (ataurulipur14@gmail.com)</strong>
+            <div className="pt-4 mt-4 border-t border-stone-200 text-[11px] text-stone-500 text-center font-medium">
+              রঙিলা রূপ কিডস • সিকিউরড এডমিন কন্ট্রোল
             </div>
           </div>
         ) : (
@@ -2023,13 +1939,38 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <span className="absolute top-0 right-0 w-2 h-2 rounded-full bg-red-600 ring-2 ring-white" />
                   </button>
 
-                  {/* Admin Profile */}
+                  {/* Admin Profile with photo upload */}
                   <div className="hidden sm:flex items-center gap-2 pl-2 border-l border-slate-200">
-                    <div className="w-7 h-7 rounded-full bg-rose-950 text-amber-300 font-black text-xs flex items-center justify-center border border-amber-400">
-                      A
-                    </div>
+                    <input
+                      type="file"
+                      ref={adminAvatarInputRef}
+                      onChange={handleAdminAvatarUpload}
+                      accept="image/*"
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => adminAvatarInputRef.current?.click()}
+                      className="relative group cursor-pointer"
+                      title={lang === 'bn' ? 'এডমিন প্রোফাইল ছবি পরিবর্তন করুন' : 'Change admin profile photo'}
+                    >
+                      {adminAvatar ? (
+                        <img
+                          src={adminAvatar}
+                          alt="Admin Avatar"
+                          className="w-8 h-8 rounded-full object-cover border-2 border-amber-400 shadow-sm group-hover:opacity-80 transition-all"
+                        />
+                      ) : (
+                        <div className="w-8 h-8 rounded-full bg-rose-950 text-amber-300 font-black text-xs flex items-center justify-center border-2 border-amber-400 group-hover:bg-rose-900 transition-all">
+                          A
+                        </div>
+                      )}
+                      <div className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity">
+                        <Camera size={12} />
+                      </div>
+                    </button>
                     <div className="text-left leading-none">
-                      <span className="text-xs font-bold text-slate-900 block">Ataur Rahman</span>
+                      <span className="text-xs font-bold text-slate-900 block">আতাউর রহমান</span>
                       <span className="text-[9px] text-rose-800 font-bold uppercase">Super Admin</span>
                     </div>
                   </div>
@@ -2802,30 +2743,44 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
                   </div>
 
-                  {/* Main Row 3: 4 Bottom Stat Cards */}
+                  {/* Main Row 3: 4 Bottom Stat Cards - 100% Real Dynamic from Orders */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     <div className="p-4 bg-white rounded-3xl border border-stone-200 shadow-xs space-y-1">
-                      <span className="text-[10px] uppercase font-bold text-stone-500">Total Revenue</span>
-                      <div className="text-xl font-serif font-black text-rose-950">৳ 1,85,650</div>
-                      <p className="text-[10px] text-emerald-600 font-bold">↑ 22.8% This Month</p>
+                      <span className="text-[10px] uppercase font-bold text-stone-500">মোট বিক্রয় রেভিনিউ (Total Revenue)</span>
+                      <div className="text-xl font-serif font-black text-rose-950">৳ {totalSales.toLocaleString()}</div>
+                      <p className="text-[10px] text-emerald-600 font-bold">
+                        {totalOrders > 0 ? `মোট ${totalOrders} টি অর্ডারের হিসাব` : 'হিস্ট্রি ক্লিয়ার (৳ ০)'}
+                      </p>
                     </div>
 
                     <div className="p-4 bg-white rounded-3xl border border-stone-200 shadow-xs space-y-1">
-                      <span className="text-[10px] uppercase font-bold text-stone-500">Average Order Value</span>
-                      <div className="text-xl font-serif font-black text-stone-900">৳ 1,487</div>
-                      <p className="text-[10px] text-emerald-600 font-bold">↑ 11.2% This Month</p>
+                      <span className="text-[10px] uppercase font-bold text-stone-500">গড় অর্ডার ভ্যালু (Average Order Value)</span>
+                      <div className="text-xl font-serif font-black text-stone-900">
+                        ৳ {totalOrders > 0 ? Math.round(totalSales / totalOrders).toLocaleString() : '0'}
+                      </div>
+                      <p className="text-[10px] text-emerald-600 font-bold">
+                        {totalOrders > 0 ? 'লাইভ অর্ডারের গড়' : '০ টি অর্ডার'}
+                      </p>
                     </div>
 
                     <div className="p-4 bg-white rounded-3xl border border-stone-200 shadow-xs space-y-1">
-                      <span className="text-[10px] uppercase font-bold text-stone-500">Conversion Rate</span>
-                      <div className="text-xl font-serif font-black text-stone-900">2.45%</div>
-                      <p className="text-[10px] text-emerald-600 font-bold">↑ 8.6% This Month</p>
+                      <span className="text-[10px] uppercase font-bold text-stone-500">সফল ডেলিভারি সম্পন্ন (Delivered Orders)</span>
+                      <div className="text-xl font-serif font-black text-emerald-700">
+                        {deliveredOrders.toLocaleString()} <span className="text-xs font-normal text-stone-600">টি</span>
+                      </div>
+                      <p className="text-[10px] text-stone-600 font-bold">
+                        {totalOrders > 0 ? `${Math.round((deliveredOrders / totalOrders) * 100)}% সফল রেট` : '০%'}
+                      </p>
                     </div>
 
                     <div className="p-4 bg-white rounded-3xl border border-stone-200 shadow-xs space-y-1">
-                      <span className="text-[10px] uppercase font-bold text-stone-500">Returning Customers</span>
-                      <div className="text-xl font-serif font-black text-stone-900">35.6%</div>
-                      <p className="text-[10px] text-emerald-600 font-bold">↑ 6.4% This Month</p>
+                      <span className="text-[10px] uppercase font-bold text-stone-500">প্রসেসিং ও কুরিয়ারে বাকি (In Pipeline)</span>
+                      <div className="text-xl font-serif font-black text-amber-700">
+                        {(totalOrders - deliveredOrders - cancelledOrders).toLocaleString()} <span className="text-xs font-normal text-stone-600">টি</span>
+                      </div>
+                      <p className="text-[10px] text-stone-600 font-bold">
+                        ক্যাশ সংগ্রহ হবে: ৳{pipelineSales.toLocaleString()}
+                      </p>
                     </div>
                   </div>
 

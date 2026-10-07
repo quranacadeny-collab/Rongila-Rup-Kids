@@ -198,7 +198,26 @@ export default function App() {
     // 1. Seed initial products to Firestore if empty
     seedInitialProductsToFirestore(PRODUCTS);
 
-    // 2. Subscribe to live Firestore products
+    // 2. Fetch server-side baby products store to ensure products never vanish
+    fetch('/api/products')
+      .then(res => res.json())
+      .then(data => {
+        if (data && Array.isArray(data.products) && data.products.length > 0) {
+          setProducts(prev => {
+            const map = new Map<string, Product>();
+            PRODUCTS.forEach(p => map.set(p.id, p));
+            data.products.forEach((p: Product) => map.set(p.id, p));
+            prev.forEach(p => map.set(p.id, p));
+            return Array.from(map.values()).filter(p => {
+              const text = `${p.category || ''} ${p.nameBn || ''} ${p.nameEn || ''}`.toLowerCase();
+              return !text.includes('saree') && !text.includes('শাড়ি') && !text.includes('শাড়ি');
+            });
+          });
+        }
+      })
+      .catch(err => console.warn('Server products load warning:', err));
+
+    // 3. Subscribe to live Firestore products
     const unsubscribeProducts = subscribeProducts((firestoreProducts) => {
       if (firestoreProducts && firestoreProducts.length > 0) {
         setProducts(firestoreProducts);
@@ -478,7 +497,15 @@ export default function App() {
       } catch (e) {}
       return updated;
     });
-    saveOrderToFirestore(newOrder).catch(err => console.error('Save new order error:', err));
+
+    // Dual persist: Firestore + Server file store
+    saveOrderToFirestore(newOrder).catch(err => console.error('Save new order to Firestore error:', err));
+    fetch('/api/orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newOrder)
+    }).catch(err => console.error('Direct server order save error:', err));
+
     trackPixelEvent('Purchase', {
       value: newOrder.totalAmount,
       currency: 'BDT',

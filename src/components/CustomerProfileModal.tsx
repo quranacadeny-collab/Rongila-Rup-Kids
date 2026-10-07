@@ -17,7 +17,8 @@ import {
   Send,
   Lock,
   UserPlus,
-  PackageCheck
+  PackageCheck,
+  Camera
 } from 'lucide-react';
 import { Language, Order } from '../types';
 import { auth, googleProvider } from '../lib/firebase';
@@ -217,15 +218,7 @@ export const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({
     setLoading(true);
     setAuthError(null);
 
-    // Fast master OTP support
-    if (['142536', '123456', '765693', '01792765693'].includes(cleanOtp)) {
-      sessionStorage.removeItem('rr_customer_local_otp');
-      await finalizeCustomerRegistration();
-      setLoading(false);
-      return;
-    }
-
-    // Check fast session OTP
+    // Check session OTP
     const localOtpData = sessionStorage.getItem('rr_customer_local_otp');
     if (localOtpData) {
       try {
@@ -290,15 +283,24 @@ export const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({
       saveUserData(userData);
     } catch (err: any) {
       console.error('Firebase Google Auth Error:', err);
-      // Fallback for iframe popup block or network policy
-      if (err.code === 'auth/popup-blocked' || err.code === 'auth/cancelled-popup-request') {
-        setAuthError(lang === 'bn' ? 'পপ-আপ বন্ধ করা আছে। অনুগ্রহ করে ব্রাউজারের পপ-আপ অ্যালাউ করুন অথবা ইমেইল দিয়ে সাইন ইন করুন।' : 'Popup was blocked. Please allow popups or use email.');
-      } else if (err.code === 'auth/popup-closed-by-user') {
-        setAuthError(lang === 'bn' ? 'লগইন পপ-আপ উইন্ডোটি বন্ধ করা হয়েছে। লগইন সম্পন্ন করতে আবার চেষ্টা করুন অথবা নিচের ইমেইল দিয়ে সাইন ইন করুন।' : 'Sign-in popup was closed before completion. Please try again.');
+      if (err.code === 'auth/operation-not-allowed') {
+        setAuthError(lang === 'bn' 
+          ? '⚠️ Firebase কনসোলে Google Sign-in এনাবল করা নেই। Firebase Console -> Authentication -> Sign-in method-এ গিয়ে Google Enable করুন অথবা নিচের ইমেইল OTP দিয়ে সরাসরি লগইন করুন।' 
+          : 'Google sign-in is not enabled in Firebase console. Please enable it under Authentication -> Sign-in method.');
       } else if (err.code === 'auth/unauthorized-domain') {
-        setAuthError(lang === 'bn' ? 'Firebase-এ Authorized domain অ্যাড হতে ১-২ মিনিট সময় লাগতে পারে। পেজ রিফ্রেশ করে আবার চেষ্টা করুন অথবা ইমেইল দিয়ে সাইন ইন করুন।' : 'Unauthorized domain in Firebase. Please refresh and try again.');
+        setAuthError(lang === 'bn' 
+          ? '⚠️ Firebase কনসোলে Authorized Domains-এ ওয়েবসাইটের লিঙ্ক যুক্ত করতে হবে: Firebase Console -> Authentication -> Settings -> Authorized Domains-এ গিয়ে ডোমেইনটি যোগ করুন অথবা নিচে ইমেইল ওটিপি দিয়ে লগইন করুন।' 
+          : 'Unauthorized domain. Please add this domain in Firebase Console -> Authentication -> Settings -> Authorized Domains.');
+      } else if (err.code === 'auth/popup-blocked' || err.code === 'auth/cancelled-popup-request') {
+        setAuthError(lang === 'bn' 
+          ? '⚠️ ব্রাউজারের পপ-আপ ব্লক করা আছে অথবা আপনি আইফ্রেমে আছেন। নতুন ট্যাবে ওয়েবসাইট খুলে চেষ্টা করুন অথবা নিচের ইমেইল ওটিপি দিয়ে এক ক্লিকে লগইন করুন।' 
+          : 'Popup was blocked by the browser. Please allow popups or use email OTP login below.');
+      } else if (err.code === 'auth/popup-closed-by-user') {
+        setAuthError(lang === 'bn' 
+          ? 'লগইন পপ-আপ উইন্ডোটি বন্ধ করা হয়েছে। আবার চেষ্টা করুন অথবা নিচের ইমেইল দিয়ে সাইন ইন করুন।' 
+          : 'Sign-in popup was closed before completion. Please try again.');
       } else {
-        setAuthError(err.message || (lang === 'bn' ? 'সাইন ইন ব্যর্থ হয়েছে' : 'Sign in failed'));
+        setAuthError(err.message || (lang === 'bn' ? 'গুগল সাইন-ইন সম্পন্ন করা যায়নি। নিচের ইমেইল দিয়ে লগইন করুন।' : 'Google sign-in failed.'));
       }
     } finally {
       setLoading(false);
@@ -411,6 +413,20 @@ export const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({
     };
     saveUserData(phoneUser);
     setLoading(false);
+  };
+
+  const handleCustomerAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const base64 = event.target?.result as string;
+      if (base64) {
+        const updated = { ...user, avatar: base64 };
+        saveUserData(updated);
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleLogout = async () => {
@@ -883,11 +899,28 @@ export const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({
               {/* User Header Profile Card */}
               <div className="p-4 bg-gradient-to-r from-stone-900 to-rose-950 text-white rounded-2xl shadow-md flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3 min-w-0">
-                  <img 
-                    src={user.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200'} 
-                    alt={user.name} 
-                    className="w-14 h-14 rounded-full object-cover border-2 border-amber-400 shrink-0 shadow-md"
-                  />
+                  <div className="relative group shrink-0">
+                    <img 
+                      src={user.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200'} 
+                      alt={user.name} 
+                      className="w-14 h-14 rounded-full object-cover border-2 border-amber-400 shrink-0 shadow-md"
+                    />
+                    <label 
+                      htmlFor="customer-avatar-input" 
+                      className="absolute inset-0 bg-black/50 rounded-full flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-amber-200"
+                      title={lang === 'bn' ? 'ছবি পরিবর্তন করুন' : 'Change Photo'}
+                    >
+                      <Camera size={16} />
+                      <span className="text-[8px] font-bold mt-0.5">ছবি দিন</span>
+                    </label>
+                    <input 
+                      id="customer-avatar-input" 
+                      type="file" 
+                      accept="image/*" 
+                      onChange={handleCustomerAvatarUpload} 
+                      className="hidden" 
+                    />
+                  </div>
                   <div className="min-w-0">
                     <h4 className="font-serif font-extrabold text-base text-amber-100 truncate">
                       {user.name}

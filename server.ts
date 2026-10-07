@@ -5,7 +5,7 @@ import * as archiver from "archiver";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
-import nodemailer from "nodemailer";
+import nodemailer, { type Transporter } from "nodemailer";
 
 dotenv.config();
 
@@ -32,34 +32,44 @@ interface SendEmailParams {
   text?: string;
 }
 
-// Resilient Email Sender for Rongila Rup Kids (Support Email + Verified Relay)
+// Global pooled transporter for authenticated relay to ensure instant OTP delivery
+const RELAY_GMAIL_USER = (process.env.AUTH_GMAIL_USER || "ataurulipur14@gmail.com").trim();
+const RELAY_GMAIL_PASS = (process.env.AUTH_GMAIL_PASS || "pecaepkmwtcoasyr").replace(/\s+/g, "");
+
+let cachedRelayTransporter: Transporter | null = null;
+function getRelayTransporter() {
+  if (!cachedRelayTransporter) {
+    cachedRelayTransporter = nodemailer.createTransport({
+      host: "smtp.gmail.com",
+      port: 465,
+      secure: true,
+      pool: true,
+      maxConnections: 5,
+      maxMessages: 100,
+      auth: { user: RELAY_GMAIL_USER, pass: RELAY_GMAIL_PASS },
+      tls: { rejectUnauthorized: false }
+    });
+  }
+  return cachedRelayTransporter;
+}
+
+// Resilient Email Sender for Rongila Rup Kids (Official Support + Authenticated Relay)
 async function sendRongilaRupEmail(params: SendEmailParams): Promise<{ success: boolean; error?: string; senderUsed?: string }> {
   const primaryUser = (dynamicSupportEmail || OFFICIAL_SUPPORT_EMAIL).trim();
   const primaryPass = (dynamicAppPassword || process.env.GMAIL_APP_PASSWORD || "").replace(/\s+/g, "");
 
-  // Verified Authenticated Relay (ensures OTPs never fail even if hosting env lacks app password)
-  const relayUser = (process.env.AUTH_GMAIL_USER || "ataurulipur14@gmail.com").trim();
-  const relayPass = (process.env.AUTH_GMAIL_PASS || "pzqqllqohgfybnpw").replace(/\s+/g, "");
+  const timeoutMs = 15000; // 15s timeout for high reliability
 
-  const timeoutMs = 10000; // 10 seconds for reliable cloud container SMTP handshakes
-
-  const createTransporter = (user: string, pass: string, port: number = 465, secure: boolean = true) => {
-    return nodemailer.createTransport({
-      host: "smtp.gmail.com",
-      port,
-      secure,
-      auth: { user, pass },
-      tls: { rejectUnauthorized: false },
-      connectionTimeout: 8000,
-      greetingTimeout: 8000,
-      socketTimeout: 8000
-    });
-  };
-
-  // 1. Try Official Support Gmail (supportrongilarup@gmail.com) if App Password is provided
+  // 1. If official support account app password is provided, try that first
   if (primaryPass) {
     try {
-      const primaryTransporter = createTransporter(primaryUser, primaryPass, 465, true);
+      const primaryTransporter = nodemailer.createTransport({
+        host: "smtp.gmail.com",
+        port: 465,
+        secure: true,
+        auth: { user: primaryUser, pass: primaryPass },
+        tls: { rejectUnauthorized: false }
+      });
       await Promise.race([
         primaryTransporter.sendMail({
           from: `"রঙিলা রূপ কিডস" <${primaryUser}>`,
@@ -69,63 +79,37 @@ async function sendRongilaRupEmail(params: SendEmailParams): Promise<{ success: 
           html: params.html,
           text: params.text
         }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error("Email delivery timed out")), timeoutMs))
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout sending via primary")), timeoutMs))
       ]);
       console.log(`[EMAIL] Delivered email to ${params.to} using official sender ${primaryUser}`);
       return { success: true, senderUsed: primaryUser };
     } catch (primaryErr: any) {
-      console.warn(`[EMAIL] Official sender (${primaryUser}) port 465 failed (${primaryErr?.message}), trying port 587...`);
-      try {
-        const primary587 = createTransporter(primaryUser, primaryPass, 587, false);
-        await primary587.sendMail({
-          from: `"রঙিলা রূপ কিডস" <${primaryUser}>`,
-          replyTo: primaryUser,
-          to: params.to,
-          subject: params.subject,
-          html: params.html,
-          text: params.text
-        });
-        return { success: true, senderUsed: primaryUser };
-      } catch (err587: any) {
-        console.warn(`[EMAIL] Official sender (${primaryUser}) port 587 also failed, switching to authenticated relay...`);
-      }
+      console.warn(`[EMAIL] Official sender (${primaryUser}) failed (${primaryErr?.message}), switching to relay...`);
     }
   }
 
-  // 2. Fallback to Authenticated Relay (sends with official support sender name & reply-to)
-  if (relayPass) {
+  // 2. Primary relay via ataurulipur14@gmail.com with pooled connection
+  if (RELAY_GMAIL_PASS) {
     try {
-      const relayTransporter = createTransporter(relayUser, relayPass, 465, true);
+      const relay = getRelayTransporter();
       await Promise.race([
-        relayTransporter.sendMail({
-          from: `"রঙিলা রূপ কিডস" <${OFFICIAL_SUPPORT_EMAIL}>`,
+        relay.sendMail({
+          from: `"রঙিলা রূপ কিডস" <${RELAY_GMAIL_USER}>`,
           replyTo: OFFICIAL_SUPPORT_EMAIL,
           to: params.to,
           subject: params.subject,
           html: params.html,
           text: params.text
         }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error("Email delivery timed out")), timeoutMs))
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout sending via relay")), timeoutMs))
       ]);
-      console.log(`[EMAIL] Delivered email to ${params.to} via authenticated relay (${relayUser})`);
-      return { success: true, senderUsed: relayUser };
+      console.log(`[EMAIL] Successfully delivered email to ${params.to} via relay (${RELAY_GMAIL_USER})`);
+      return { success: true, senderUsed: RELAY_GMAIL_USER };
     } catch (relayErr: any) {
-      console.warn(`[EMAIL] Relay port 465 failed (${relayErr?.message}), trying port 587...`);
-      try {
-        const relay587 = createTransporter(relayUser, relayPass, 587, false);
-        await relay587.sendMail({
-          from: `"রঙিলা রূপ কিডস" <${OFFICIAL_SUPPORT_EMAIL}>`,
-          replyTo: OFFICIAL_SUPPORT_EMAIL,
-          to: params.to,
-          subject: params.subject,
-          html: params.html,
-          text: params.text
-        });
-        return { success: true, senderUsed: relayUser };
-      } catch (err2: any) {
-        console.error(`[EMAIL] Relay send error:`, err2?.message);
-        return { success: false, error: err2?.message || "Failed to deliver email" };
-      }
+      console.error(`[EMAIL] Relay send error:`, relayErr?.message);
+      // Reset cached transporter in case of connection drop
+      cachedRelayTransporter = null;
+      return { success: false, error: relayErr?.message || "Failed to deliver email" };
     }
   }
 
@@ -276,8 +260,9 @@ async function startServer() {
   // Admin Real Email OTP Verification Endpoints
   // ------------------------------------------------------------------
   const AUTHORIZED_ADMIN_EMAILS = [
-    "ataurulipur14@gmail.com",
     OFFICIAL_SUPPORT_EMAIL,
+    "supportrongilarup@gmail.com",
+    "ataurulipur14@gmail.com",
     (process.env.GMAIL_USER || "").toLowerCase().trim()
   ].filter(Boolean);
 
@@ -291,7 +276,7 @@ async function startServer() {
     try {
       const { emailOrPhone } = req.body;
       if (!emailOrPhone) {
-        return res.status(400).json({ success: false, message: "জি-মেইল বা ফোন নম্বর প্রদান করুন।" });
+        return res.status(400).json({ success: false, message: "জি-মেইল অ্যাড্রেস প্রদান করুন।" });
       }
 
       const input = String(emailOrPhone).trim().toLowerCase();
@@ -302,10 +287,10 @@ async function startServer() {
       const cleanPhone = input.replace(/[^\d]/g, '');
       const isAuthorizedPhone = AUTHORIZED_ADMIN_PHONES.some(p => cleanPhone.endsWith(p.slice(-11)));
 
-      if (!isAuthorizedEmail && !isAuthorizedPhone && input !== "ataurulipur14@gmail.com") {
+      if (!isAuthorizedEmail && !isAuthorizedPhone) {
         return res.status(403).json({
           success: false,
-          message: "শুধুমাত্র অনুমোদিত অনারের জি-মেইল (ataurulipur14@gmail.com) দিয়ে এডমিনে লগইন করা সম্ভব।"
+          message: "শুধুমাত্র অনুমোদিত এডমিন অ্যাকাউন্টের মাধ্যমে লগইন করা সম্ভব।"
         });
       }
 
@@ -322,7 +307,7 @@ async function startServer() {
       console.log(`[ADMIN SECURITY] Generated OTP for ${input}: ${otpCode}`);
 
       // Attempt Real Email Delivery via sendRongilaRupEmail
-      const emailTarget = isEmail ? input : "ataurulipur14@gmail.com";
+      const emailTarget = isEmail ? input : OFFICIAL_SUPPORT_EMAIL;
       const sendRes = await sendRongilaRupEmail({
         to: emailTarget,
         subject: `🔐 আপনার এডমিন প্যানেল লগইন OTP কোড: ${otpCode} - রঙিলা রূপ`,
@@ -334,8 +319,8 @@ async function startServer() {
             </div>
             <div style="padding: 30px 24px; text-align: center;">
               <p style="font-size: 15px; color: #1c1917; margin-bottom: 20px;">
-                আসসালামু আলাইকুম আতাউর রহমান ভাই,<br/>
-                আপনার <strong>রঙিলা রূপ</strong> এডমিন প্যানেলে লগইন করার জন্য নিচে প্রদত্ত ১-টাইম সিকিউরিটি OTP কোডটি ব্যবহার করুন:
+                আসসালামু আলাইকুম,<br/>
+                আপনার <strong>রঙিলা রূপ কিডস</strong> এডমিন প্যানেলে লগইন করার জন্য নিচে প্রদত্ত ১-টাইম সিকিউরিটি OTP কোডটি ব্যবহার করুন:
               </p>
               <div style="background: #fef3c7; border: 2px dashed #d97706; border-radius: 12px; padding: 18px 24px; display: inline-block; margin: 15px 0;">
                 <span style="font-size: 34px; font-weight: 900; letter-spacing: 8px; color: #831843; font-family: monospace;">
@@ -344,11 +329,11 @@ async function startServer() {
               </div>
               <p style="font-size: 12px; color: #78716c; margin-top: 15px;">
                 ⏰ এই OTP কোডটির মেয়াদ <strong>১০ মিনিট</strong>।<br/>
-                ⚠️ সতর্কতা: এই কোডটি কারো সাথে শেয়ার করবেন না। আপনি ছাড়া অন্য কেউ আপনার এডমিনে ঢুকতে পারবে না।
+                ⚠️ সতর্কতা: এই কোডটি কারো সাথে শেয়ার করবেন না।
               </p>
             </div>
             <div style="background: #f5f5f4; padding: 16px; text-align: center; font-size: 11px; color: #a8a29e; border-top: 1px solid #e7e5e4;">
-              রঙিলা রূপ কিডস • উত্তরা, ঢাকা • হটলাইন: 01792765693 • সাপোর্ট: ${OFFICIAL_SUPPORT_EMAIL}
+              রঙিলা রূপ কিডস • অনলাইন শপ এডমিন কন্ট্রোল
             </div>
           </div>
         `,
@@ -357,11 +342,11 @@ async function startServer() {
 
       if (!sendRes.success) {
         console.warn("[ADMIN SECURITY] Email delivery failed or slow:", sendRes.error);
-        return res.json({
+        return res.status(500).json({
           success: false,
           emailSent: false,
           target: input,
-          message: `⚠️ আপনার জি-মেইলে (${emailTarget}) ওটিপি পাঠানো সম্ভব হয়নি (${sendRes.error || 'সংযোগ বিলম্বিত'})। কোনো ডেমো কোড দিয়ে লগইন করা যাবে না। অনুগ্রহ করে 'মাস্টার পাসকোড' ট্যাবে ক্লিক করে অনার পাসকোড (142536 অথবা 01792765693) দিয়ে লগইন করুন।`
+          message: `⚠️ ইমেইল পাঠাতে সমস্যা হয়েছে (${sendRes.error || 'সংযোগ ত্রুটি'})। অনুগ্রহ করে আবার চেষ্টা করুন।`
         });
       }
 
@@ -370,12 +355,12 @@ async function startServer() {
         emailSent: true,
         target: input,
         expiresInMinutes: 10,
-        message: `✅ আপনার জি-মেইল (${emailTarget})-এ আসল OTP কোড পাঠিয়ে দেওয়া হয়েছে! অনুগ্রহ করে ইনবক্স অথবা স্প্যাম ফোল্ডার চেক করুন।`
+        message: `✅ আপনার জি-মেইলে ৬-সংখ্যার সিকিউরিটি OTP কোড পাঠিয়ে দেওয়া হয়েছে! ইনবক্স অথবা স্প্যাম ফোল্ডার চেক করুন।`
       });
 
     } catch (err: any) {
       console.error("Error sending admin OTP:", err);
-      return res.status(500).json({ success: false, message: "সার্ভারে সমস্যা হয়েছে। অনুগ্রহ করে অনার মাস্টার পাসকোড (01792765693 বা 142536) দিয়ে সরাসরি প্রবেশ করুন।" });
+      return res.status(500).json({ success: false, message: "সার্ভারে ওটিপি পাঠাতে সমস্যা হয়েছে। পুনরায় চেষ্টা করুন।" });
     }
   });
 
@@ -483,6 +468,14 @@ async function startServer() {
   });
 
   // 1.2 Activate Admin Account
+  app.get("/api/admin/invites", (req, res) => {
+    try {
+      res.json({ success: true, invites: readInvites() });
+    } catch (e: any) {
+      res.json({ success: true, invites: [] });
+    }
+  });
+
   app.post("/api/admin/activate", (req, res) => {
     try {
       const { token, email } = req.body;
@@ -666,48 +659,45 @@ async function startServer() {
     }
   });
 
-  // 2. Verify OTP
+  // 2. Strict OTP Verification (MUST match code sent to Gmail)
   app.post("/api/admin/verify-otp", (req, res) => {
     try {
       const { emailOrPhone, otp } = req.body;
       if (!emailOrPhone || !otp) {
-        return res.status(400).json({ success: false, message: "OTP কোড প্রদান করুন।" });
+        return res.status(400).json({ success: false, message: "অনুগ্রহ করে জি-মেইল ও আসল ৬-সংখ্যার OTP কোড প্রদান করুন।" });
       }
 
       const input = String(emailOrPhone).trim().toLowerCase();
       const codeInput = String(otp).trim();
 
-      const isMasterPasscode = ['142536', '765693', '01792765693', 'rongilarup2026'].includes(codeInput);
-
       const record = adminOtpStore.get(input);
-      if (!record && !isMasterPasscode) {
-        return res.status(400).json({ success: false, message: "কোনো সক্রিয় OTP পাওয়া যায়নি। অনুগ্রহ করে নতুন OTP রিকোয়েস্ট করুন অথবা অনার পাসকোড দিন।" });
+      if (!record) {
+        return res.status(400).json({
+          success: false,
+          message: "কোনো সক্রিয় ওটিপি পাওয়া যায়নি। আপনার জি-মেইলে নতুন ওটিপি পাঠান।"
+        });
       }
 
-      if (record && !isMasterPasscode) {
-        if (Date.now() > record.expiresAt) {
-          adminOtpStore.delete(input);
-          return res.status(400).json({ success: false, message: "OTP কোডটির ১০ মিনিটের মেয়াদ শেষ হয়ে গেছে। অনুগ্রহ করে আবার পাঠান।" });
-        }
+      if (Date.now() > record.expiresAt) {
+        adminOtpStore.delete(input);
+        return res.status(400).json({ success: false, message: "OTP কোডটির ১০ মিনিটের মেয়াদ শেষ হয়ে গেছে। অনুগ্রহ করে নতুন করে কোড পাঠান।" });
+      }
 
-        record.attempts += 1;
-        if (record.attempts > 5) {
-          adminOtpStore.delete(input);
-          return res.status(429).json({ success: false, message: "অনেকবার ভুল OTP দেওয়া হয়েছে। নিরাপত্তার স্বার্থে কোডটি বাতিল করা হলো।" });
-        }
+      record.attempts += 1;
+      if (record.attempts > 5) {
+        adminOtpStore.delete(input);
+        return res.status(429).json({ success: false, message: "অতিরিক্ত ভুল OTP দেওয়া হয়েছে। নিরাপত্তার স্বার্থে কোডটি বাতিল করা হলো।" });
+      }
 
-        if (record.code !== codeInput) {
-          return res.status(400).json({
-            success: false,
-            message: `ভুল OTP কোড! অবশিষ্ট প্রচেষ্টা: ${Math.max(0, 5 - record.attempts)}`
-          });
-        }
+      if (record.code !== codeInput) {
+        return res.status(400).json({
+          success: false,
+          message: `ভুল OTP কোড! আপনার জি-মেইলে পাঠানো সঠিক কোডটি দিন। অবশিষ্ট প্রচেষ্টা: ${Math.max(0, 5 - record.attempts)}`
+        });
       }
 
       // Success! Invalidate OTP so it cannot be reused
-      if (record) {
-        adminOtpStore.delete(input);
-      }
+      adminOtpStore.delete(input);
 
       // Create simple authenticated session token
       const sessionToken = `rr_sec_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
@@ -727,6 +717,39 @@ async function startServer() {
     } catch (err: any) {
       console.error("Error verifying admin OTP:", err);
       return res.status(500).json({ success: false, message: "ভেরিফিকেশন ব্যর্থ হয়েছে।" });
+    }
+  });
+
+  // Admin Profile Photo & Settings Storage
+  const ADMIN_PROFILE_FILE = path.join(process.cwd(), 'data', 'admin_profile.json');
+  app.get("/api/admin/profile", (_req, res) => {
+    try {
+      if (fs.existsSync(ADMIN_PROFILE_FILE)) {
+        const data = JSON.parse(fs.readFileSync(ADMIN_PROFILE_FILE, 'utf-8'));
+        return res.json({ success: true, profile: data });
+      }
+    } catch (e) {}
+    res.json({
+      success: true,
+      profile: {
+        name: "আতাউর রহমান",
+        role: "অনার ও ফাউন্ডার (Super Admin)",
+        phone: "01792765693",
+        email: "ataurulipur14@gmail.com",
+        avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200"
+      }
+    });
+  });
+
+  app.post("/api/admin/profile", (req, res) => {
+    try {
+      const data = req.body;
+      const dir = path.dirname(ADMIN_PROFILE_FILE);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(ADMIN_PROFILE_FILE, JSON.stringify(data, null, 2), 'utf-8');
+      res.json({ success: true, profile: data, message: "প্রোফাইল ছবি ও তথ্য সফলভাবে সেভ করা হয়েছে।" });
+    } catch (e: any) {
+      res.status(500).json({ success: false, message: e.message || "Failed to update profile" });
     }
   });
 

@@ -75,6 +75,7 @@ export interface Order {
   discount: number;
   customerName: string;
   phone: string;
+  customerEmail?: string;
   address: string;
   city: string;
   paymentMethod: 'cod' | 'bkash' | 'nagad' | 'rocket';

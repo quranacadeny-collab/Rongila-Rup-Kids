@@ -140,43 +140,16 @@ export const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({
         setOtpSentEmail(cleanEmail);
         setAuthSuccessMsg(data.message || (lang === 'bn' ? 'আপনার জি-মেইলে ওটিপি কোড পাঠানো হয়েছে!' : 'Verification OTP sent to your Gmail!'));
         setAuthMode('otp_verify');
-        if (data.fallbackOtp) {
-          setInputOtp(data.fallbackOtp);
-        } else {
-          setInputOtp('');
-        }
+        setInputOtp('');
         return;
       }
 
-      if (data && !data.success) {
-        triggerCustomerFastOtp(cleanEmail);
-        return;
-      }
-
-      triggerCustomerFastOtp(cleanEmail);
+      setAuthError(data?.message || (lang === 'bn' ? 'ওটিপি পাঠাতে ব্যর্থ হয়েছে। অনুগ্রহ করে সঠিক জি-মেইল চেক করে পুনরায় চেষ্টা করুন।' : 'Failed to send OTP. Please check your email and try again.'));
     } catch (err: any) {
-      triggerCustomerFastOtp(cleanEmail);
+      setAuthError(lang === 'bn' ? 'সার্ভারে সংযোগ করতে বিলম্ব হচ্ছে। অনুগ্রহ করে আবার চেষ্টা করুন।' : 'Server connection timeout. Please try again.');
     } finally {
       setLoading(false);
     }
-  };
-
-  // Instant resilient OTP handler so customer registration is never stuck
-  const triggerCustomerFastOtp = (cleanEmail: string) => {
-    const localOtp = Math.floor(100000 + Math.random() * 900000).toString();
-    sessionStorage.setItem('rr_customer_local_otp', JSON.stringify({
-      email: cleanEmail,
-      otp: localOtp,
-      expiresAt: Date.now() + 10 * 60 * 1000
-    }));
-    setOtpSentEmail(cleanEmail);
-    setAuthMode('otp_verify');
-    setInputOtp(localOtp);
-    setAuthSuccessMsg(
-      lang === 'bn' 
-        ? `⚠️ তাৎক্ষণিক ভেরিফিকেশন ওটিপি কোড: ${localOtp} (নিচের বক্সে কোডটি অটো-সেট করা হয়েছে)`
-        : `Verification OTP is: ${localOtp}`
-    );
   };
 
   // Complete Customer Registration after successful OTP verification

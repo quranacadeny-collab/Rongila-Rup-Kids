@@ -746,6 +746,34 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   };
 
+  const [isTestingOrderAlert, setIsTestingOrderAlert] = useState(false);
+  const handleTestOrderAlert = async () => {
+    setIsTestingOrderAlert(true);
+    setEmailFeedback(null);
+    try {
+      const res = await fetch('/api/admin/test-order-alert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const data = await res.json();
+      if (data.success) {
+        setEmailFeedback({
+          type: 'success',
+          text: data.message || '✅ নতুন কাস্টমার অর্ডার ইমেইল অ্যালার্ট সফলভাবে পাঠানো হয়েছে! ইনবক্স চেক করুন।'
+        });
+      } else {
+        setEmailFeedback({
+          type: 'error',
+          text: `অর্ডার অ্যালার্ট পাঠানো যায়নি: ${data.message || 'ত্রুটি'}`
+        });
+      }
+    } catch (err: any) {
+      setEmailFeedback({ type: 'error', text: 'অর্ডার অ্যালার্ট পাঠানো ব্যর্থ হয়েছে।' });
+    } finally {
+      setIsTestingOrderAlert(false);
+    }
+  };
+
   // Courier Live Delivery Auto-Sync State
   const [isSyncingCourier, setIsSyncingCourier] = useState(false);
   const [lastCourierSyncTime, setLastCourierSyncTime] = useState<string>('');
@@ -1684,21 +1712,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               {/* REAL GMAIL OTP VIA SERVER */}
               {otpStep === 'request' ? (
                 <form onSubmit={handleRequestOtp} className="space-y-4">
-                  <div>
-                    <label className="block text-left text-xs font-bold text-stone-700 mb-1.5">
-                      অনুমোদিত এডমিন জি-মেইল অ্যাড্রেস:
-                    </label>
-                    <input
-                      type="email"
-                      required
-                      value={adminAuthInput}
-                      onChange={(e) => {
-                        setAdminAuthInput(e.target.value);
-                        setAuthError('');
-                      }}
-                      placeholder="e.g. supportrongilarup@gmail.com"
-                      className="w-full px-4 py-3.5 bg-stone-50 border border-stone-300 rounded-2xl text-center text-sm font-mono font-bold text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-inner"
-                    />
+                  <div className="bg-stone-100 border border-stone-200 rounded-2xl p-4 text-center space-y-2">
+                    <div className="inline-flex p-2 bg-amber-50 rounded-full text-amber-700 mb-1">
+                      <ShieldCheck size={28} />
+                    </div>
+                    <p className="text-xs font-bold text-stone-800">
+                      {lang === 'bn' 
+                        ? 'নিরাপত্তা যাচাই: অফিসিয়াল অ্যাডমিন ইনবক্সে ওটিপি কোড যাবে' 
+                        : 'Security Verification: OTP code will be sent to the official admin inbox'}
+                    </p>
+                    <p className="text-[11px] text-stone-500">
+                      {lang === 'bn'
+                        ? 'নিচের বাটনে ক্লিক করলে আপনার জি-মেইলে ৬-সংখ্যার সিকিউরিটি ওটিপি চলে যাবে।'
+                        : 'Click below to receive a 6-digit one-time security authentication code.'}
+                    </p>
                     {authError && (
                       <div className="p-2.5 bg-red-50 border border-red-200 rounded-xl mt-2 text-left space-y-1">
                         <p className="text-[11px] font-bold text-red-700 leading-tight">
@@ -1711,7 +1738,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <button
                     type="submit"
                     disabled={isSendingOtp}
-                    className="w-full py-3.5 bg-rose-950 hover:bg-rose-900 disabled:bg-stone-400 text-amber-300 font-extrabold text-xs rounded-2xl shadow-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
+                    className="w-full py-4 bg-rose-950 hover:bg-rose-900 disabled:bg-stone-400 text-amber-300 font-extrabold text-xs rounded-2xl shadow-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
                     {isSendingOtp ? (
                       <>
@@ -1721,7 +1748,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     ) : (
                       <>
                         <Send size={16} />
-                        <span>{lang === 'bn' ? 'জি-মেইলে আসল OTP কোড পাঠান' : 'Send Real OTP to Gmail'}</span>
+                        <span>{lang === 'bn' ? 'অফিসিয়াল জি-মেইলে OTP কোড পাঠান' : 'Send OTP to Official Gmail'}</span>
                       </>
                     )}
                   </button>
@@ -4737,7 +4764,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-xl text-xs font-bold flex items-center gap-1.5 border border-stone-300 cursor-pointer transition-all disabled:opacity-50"
                           >
                             <Send size={14} />
-                            <span>{isTestingEmail ? 'টেস্ট ইমেইল পাঠানো হচ্ছে...' : '🧪 টেস্ট ইমেইল পাঠান'}</span>
+                            <span>{isTestingEmail ? 'টেস্ট ইমেইল পাঠানো হচ্ছে...' : '🧪 টেস্ট OTP পাঠান'}</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={handleTestOrderAlert}
+                            disabled={isTestingOrderAlert}
+                            className="px-4 py-2 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-xl text-xs font-bold flex items-center gap-1.5 border border-amber-300 cursor-pointer transition-all disabled:opacity-50 shadow-xs"
+                          >
+                            <ShoppingBag size={14} />
+                            <span>{isTestingOrderAlert ? 'অর্ডার অ্যালার্ট পাঠানো হচ্ছে...' : '🛍️ নতুন অর্ডার অ্যালার্ট টেস্ট করুন'}</span>
                           </button>
                         </div>
                       </form>

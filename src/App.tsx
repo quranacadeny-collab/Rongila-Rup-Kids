@@ -32,6 +32,8 @@ import { WhatsAppSupportWidget } from './components/WhatsAppSupportWidget';
 import { ShareProductModal } from './components/ShareProductModal';
 import { initMetaPixel, trackPixelEvent } from './utils/pixel';
 import { getSafeTimestamp } from './utils/format';
+import { catalogPerf } from './utils/performanceMonitor';
+import { useCatalogPerformance } from './utils/useCatalogPerformance';
 import { 
   subscribeProducts, 
   subscribeOrders, 
@@ -199,9 +201,15 @@ export default function App() {
     seedInitialProductsToFirestore(PRODUCTS);
 
     // 2. Fetch server-side baby products store to ensure products never vanish
+    const apiFetchTraceId = `api-fetch-${Date.now()}`;
+    catalogPerf.startTrace(apiFetchTraceId, 'API Fetch: /api/products', 'network_fetch');
     fetch('/api/products')
       .then(res => res.json())
       .then(data => {
+        catalogPerf.endTrace(apiFetchTraceId, {
+          source: 'REST /api/products',
+          productCount: data?.products?.length || 0
+        });
         if (data && Array.isArray(data.products) && data.products.length > 0) {
           setProducts(prev => {
             const map = new Map<string, Product>();
@@ -215,10 +223,19 @@ export default function App() {
           });
         }
       })
-      .catch(err => console.warn('Server products load warning:', err));
+      .catch(err => {
+        catalogPerf.endTrace(apiFetchTraceId, { error: String(err) });
+        console.warn('Server products load warning:', err);
+      });
 
     // 3. Subscribe to live Firestore products
+    const firestoreSyncTraceId = `firestore-sync-${Date.now()}`;
+    catalogPerf.startTrace(firestoreSyncTraceId, 'Firestore Live Products Sync', 'firestore_sync');
     const unsubscribeProducts = subscribeProducts((firestoreProducts) => {
+      catalogPerf.endTrace(firestoreSyncTraceId, {
+        source: 'Firestore Realtime Snapshot',
+        itemCount: firestoreProducts?.length || 0
+      });
       if (firestoreProducts && firestoreProducts.length > 0) {
         setProducts(firestoreProducts);
       }
@@ -591,9 +608,17 @@ export default function App() {
     setReviews(prev => [rev, ...prev]);
   };
 
-  // Filtered Products Calculation
+  // Filtered Products Calculation with Performance Tracing
   const filteredProducts = useMemo(() => {
-    return products.filter(p => {
+    const traceId = `filter-sort-${Date.now()}`;
+    catalogPerf.startTrace(traceId, 'Catalog Filter & Sort Calculation', 'filter_sort', {
+      totalProducts: products.length,
+      category: selectedCategory,
+      search: searchQuery || undefined,
+      sortBy
+    });
+
+    const result = products.filter(p => {
       // Category filter
       if (selectedCategory !== 'all' && p.category !== selectedCategory) {
         if (selectedCategory === 'festive' && !p.isFestiveSpecial) return false;
@@ -628,7 +653,22 @@ export default function App() {
       if (timeB !== timeA) return timeB - timeA;
       return 0; // featured default
     });
+
+    catalogPerf.endTrace(traceId, {
+      filteredCount: result.length
+    });
+
+    return result;
   }, [products, selectedCategory, searchQuery, priceMax, selectedFabric, sortBy]);
+
+  // Lightweight performance monitor tracking catalog load time & bottlenecks
+  useCatalogPerformance({
+    products,
+    filteredProducts,
+    selectedCategory,
+    searchQuery,
+    sortBy
+  });
 
   const totalCartCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
   const pendingOrdersCount = orders.filter(o => o.status === 'processing' || (o.status as string) === 'pending').length;

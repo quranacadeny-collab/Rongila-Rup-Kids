@@ -20,7 +20,8 @@ import {
   UploadCloud,
   Trash2,
   Image as ImageIcon,
-  Receipt
+  Receipt,
+  Mail
 } from 'lucide-react';
 import QRCode from 'qrcode';
 import { CartItem, Language, Order } from '../types';
@@ -87,6 +88,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [customerEmail, setCustomerEmail] = useState('');
   const [address, setAddress] = useState('');
   const [selectedDistrict, setSelectedDistrict] = useState<string>('dhaka');
   const [deliveryZone, setDeliveryZone] = useState<'inside_dhaka' | 'outside_dhaka'>('inside_dhaka');
@@ -149,6 +151,20 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       setDeliveryZone('outside_dhaka');
     }
   };
+
+  // Prefill customer details from localStorage if available
+  useEffect(() => {
+    try {
+      const savedCustomer = localStorage.getItem('rr_customer');
+      if (savedCustomer) {
+        const parsed = JSON.parse(savedCustomer);
+        if (parsed.name && !name) setName(parsed.name);
+        if (parsed.phone && !phone) setPhone(parsed.phone);
+        if (parsed.address && !address) setAddress(parsed.address);
+        if (parsed.email && !customerEmail) setCustomerEmail(parsed.email);
+      }
+    } catch (e) {}
+  }, []);
 
   // Generate real scannable QR Code when order is confirmed
   useEffect(() => {
@@ -314,6 +330,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       discount: discountAmount,
       customerName: name.trim(),
       phone: phone.trim(),
+      customerEmail: customerEmail.trim() || undefined,
       address: address.trim(),
       city: `${districtDisplayName} [${locationLabel}]`,
       paymentMethod,
@@ -414,6 +431,23 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                       className="w-full pl-9 pr-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
                     />
                     <Phone size={14} className="absolute left-3 top-3 text-stone-400" />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 mb-1 flex items-center justify-between">
+                    <span>{lang === 'bn' ? 'ইমেইল এড্রেস (ঐচ্ছিক)' : 'Email Address (Optional)'}</span>
+                    <span className="text-[10px] text-amber-700 font-normal">{lang === 'bn' ? 'ইনভয়েস ও রসিদ পেতে' : 'For invoice & updates'}</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="email"
+                      value={customerEmail}
+                      onChange={(e) => setCustomerEmail(e.target.value)}
+                      placeholder="customer@gmail.com"
+                      className="w-full pl-9 pr-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                    />
+                    <Mail size={14} className="absolute left-3 top-3 text-stone-400" />
                   </div>
                 </div>
               </div>

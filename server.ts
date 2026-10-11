@@ -19,10 +19,10 @@ const adminOtpStore = new Map<string, OtpRecord>();
 const customerOtpStore = new Map<string, OtpRecord & { name?: string; address?: string; phone?: string }>();
 
 // Support & Sender Email Configuration
-const OFFICIAL_SUPPORT_EMAIL = "supportrongilarup@gmail.com";
+const OFFICIAL_SUPPORT_EMAIL = (process.env.SUPPORT_EMAIL || process.env.GMAIL_USER || "supportrongilarup@gmail.com").trim();
 
 // In-memory + env tracking for official sender
-let dynamicSupportEmail = (process.env.GMAIL_USER || OFFICIAL_SUPPORT_EMAIL).trim();
+let dynamicSupportEmail = OFFICIAL_SUPPORT_EMAIL;
 let dynamicAppPassword = (process.env.GMAIL_APP_PASSWORD || "").replace(/\s+/g, "");
 
 interface SendEmailParams {
@@ -32,13 +32,35 @@ interface SendEmailParams {
   text?: string;
 }
 
-// Global pooled transporter for authenticated relay to ensure instant OTP delivery
+// Global pooled transporter for official brand Gmail sender
+let cachedPrimaryTransporter: Transporter | null = null;
+function getPrimaryTransporter() {
+  const user = (process.env.GMAIL_USER || dynamicSupportEmail || OFFICIAL_SUPPORT_EMAIL).trim();
+  const pass = (dynamicAppPassword || process.env.GMAIL_APP_PASSWORD || "").replace(/\s+/g, "");
+  if (!pass) return null;
+
+  if (!cachedPrimaryTransporter) {
+    cachedPrimaryTransporter = nodemailer.createTransport({
+      host: "smtp.gmail.com",
+      port: 465,
+      secure: true,
+      pool: true,
+      maxConnections: 5,
+      maxMessages: 100,
+      auth: { user, pass },
+      tls: { rejectUnauthorized: false }
+    });
+  }
+  return cachedPrimaryTransporter;
+}
+
+// Global pooled transporter for authenticated relay backup
 const RELAY_GMAIL_USER = (process.env.AUTH_GMAIL_USER || "ataurulipur14@gmail.com").trim();
 const RELAY_GMAIL_PASS = (process.env.AUTH_GMAIL_PASS || "pecaepkmwtcoasyr").replace(/\s+/g, "");
 
 let cachedRelayTransporter: Transporter | null = null;
 function getRelayTransporter() {
-  if (!cachedRelayTransporter) {
+  if (!cachedRelayTransporter && RELAY_GMAIL_PASS) {
     cachedRelayTransporter = nodemailer.createTransport({
       host: "smtp.gmail.com",
       port: 465,
@@ -55,47 +77,44 @@ function getRelayTransporter() {
 
 // Resilient Email Sender for Rongila Rup Kids (Official Support + Authenticated Relay)
 async function sendRongilaRupEmail(params: SendEmailParams): Promise<{ success: boolean; error?: string; senderUsed?: string }> {
-  const primaryUser = (dynamicSupportEmail || OFFICIAL_SUPPORT_EMAIL).trim();
-  const primaryPass = (dynamicAppPassword || process.env.GMAIL_APP_PASSWORD || "").replace(/\s+/g, "");
+  const brandSenderAddress = OFFICIAL_SUPPORT_EMAIL;
+  const brandFromName = "রঙিলা রূপ কিডস (Rongila Rup Kids)";
+  const timeoutMs = 12000; // 12s timeout for instant OTP delivery
 
-  const timeoutMs = 15000; // 15s timeout for high reliability
-
-  // 1. If official support account app password is provided, try that first
-  if (primaryPass) {
+  // 1. First Priority: Send directly using supportrongilarup@gmail.com credentials from .env
+  const primary = getPrimaryTransporter();
+  if (primary) {
     try {
-      const primaryTransporter = nodemailer.createTransport({
-        host: "smtp.gmail.com",
-        port: 465,
-        secure: true,
-        auth: { user: primaryUser, pass: primaryPass },
-        tls: { rejectUnauthorized: false }
-      });
       await Promise.race([
-        primaryTransporter.sendMail({
-          from: `"রঙিলা রূপ কিডস" <${primaryUser}>`,
-          replyTo: primaryUser,
+        primary.sendMail({
+          from: `"${brandFromName}" <${brandSenderAddress}>`,
+          sender: brandSenderAddress,
+          replyTo: brandSenderAddress,
           to: params.to,
           subject: params.subject,
           html: params.html,
           text: params.text
         }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout sending via primary")), timeoutMs))
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout sending via official brand sender")), timeoutMs))
       ]);
-      console.log(`[EMAIL] Delivered email to ${params.to} using official sender ${primaryUser}`);
-      return { success: true, senderUsed: primaryUser };
+      console.log(`[EMAIL] Delivered email to ${params.to} using official brand sender (${brandSenderAddress})`);
+      return { success: true, senderUsed: brandSenderAddress };
     } catch (primaryErr: any) {
-      console.warn(`[EMAIL] Official sender (${primaryUser}) failed (${primaryErr?.message}), switching to relay...`);
+      console.warn(`[EMAIL] Official sender (${brandSenderAddress}) attempt failed (${primaryErr?.message}), switching to relay backup...`);
+      // Reset cached primary transporter in case of connection drop
+      cachedPrimaryTransporter = null;
     }
   }
 
-  // 2. Primary relay via ataurulipur14@gmail.com with pooled connection
-  if (RELAY_GMAIL_PASS) {
+  // 2. High-reliability fallback relay with Official Brand headers & reply-to
+  const relay = getRelayTransporter();
+  if (relay) {
     try {
-      const relay = getRelayTransporter();
       await Promise.race([
         relay.sendMail({
-          from: `"রঙিলা রূপ কিডস" <${RELAY_GMAIL_USER}>`,
-          replyTo: OFFICIAL_SUPPORT_EMAIL,
+          from: `"${brandFromName}" <${brandSenderAddress}>`,
+          sender: brandSenderAddress,
+          replyTo: brandSenderAddress,
           to: params.to,
           subject: params.subject,
           html: params.html,
@@ -103,11 +122,10 @@ async function sendRongilaRupEmail(params: SendEmailParams): Promise<{ success: 
         }),
         new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout sending via relay")), timeoutMs))
       ]);
-      console.log(`[EMAIL] Successfully delivered email to ${params.to} via relay (${RELAY_GMAIL_USER})`);
-      return { success: true, senderUsed: RELAY_GMAIL_USER };
+      console.log(`[EMAIL] Delivered email to ${params.to} from official brand email (${brandSenderAddress}) via verified relay`);
+      return { success: true, senderUsed: brandSenderAddress };
     } catch (relayErr: any) {
       console.error(`[EMAIL] Relay send error:`, relayErr?.message);
-      // Reset cached transporter in case of connection drop
       cachedRelayTransporter = null;
       return { success: false, error: relayErr?.message || "Failed to deliver email" };
     }
@@ -274,12 +292,8 @@ async function startServer() {
   // 1. Send OTP to Admin Gmail
   app.post("/api/admin/send-otp", async (req, res) => {
     try {
-      const { emailOrPhone } = req.body;
-      if (!emailOrPhone) {
-        return res.status(400).json({ success: false, message: "জি-মেইল অ্যাড্রেস প্রদান করুন।" });
-      }
-
-      const input = String(emailOrPhone).trim().toLowerCase();
+      const { emailOrPhone } = req.body || {};
+      const input = (emailOrPhone ? String(emailOrPhone).trim().toLowerCase() : OFFICIAL_SUPPORT_EMAIL);
       const isEmail = input.includes("@");
 
       // Verify authorized owner
@@ -662,13 +676,13 @@ async function startServer() {
   // 2. Strict OTP Verification (MUST match code sent to Gmail)
   app.post("/api/admin/verify-otp", (req, res) => {
     try {
-      const { emailOrPhone, otp } = req.body;
-      if (!emailOrPhone || !otp) {
-        return res.status(400).json({ success: false, message: "অনুগ্রহ করে জি-মেইল ও আসল ৬-সংখ্যার OTP কোড প্রদান করুন।" });
-      }
+      const { emailOrPhone, otp } = req.body || {};
+      const input = (emailOrPhone ? String(emailOrPhone).trim().toLowerCase() : OFFICIAL_SUPPORT_EMAIL);
+      const codeInput = String(otp || "").trim();
 
-      const input = String(emailOrPhone).trim().toLowerCase();
-      const codeInput = String(otp).trim();
+      if (!codeInput) {
+        return res.status(400).json({ success: false, message: "অনুগ্রহ করে জি-মেইলে প্রাপ্ত আসল ৬-সংখ্যার OTP কোড প্রদান করুন।" });
+      }
 
       const record = adminOtpStore.get(input);
       if (!record) {
@@ -1182,6 +1196,369 @@ CRITICAL CONVERSATIONAL RULES:
     res.json({ success: true, orders });
   });
 
+  // Track orders that have already sent an email notification to prevent duplicate sends
+  const notifiedOrdersStore = new Set<string>();
+
+  // Send High-fidelity Customer Order Notification to Admin Gmail
+  async function sendOrderNotificationEmail(order: any): Promise<{ success: boolean; error?: string }> {
+    try {
+      const rawTargets = (process.env.ADMIN_NOTIFICATION_EMAIL || "ataurulipur14@gmail.com, supportrongilarup@gmail.com").trim();
+      const adminTargets = Array.from(new Set(
+        rawTargets.split(',').map(s => s.trim().toLowerCase()).filter(s => s.includes('@'))
+      ));
+
+      if (!adminTargets.includes("ataurulipur14@gmail.com")) {
+        adminTargets.push("ataurulipur14@gmail.com");
+      }
+      if (!adminTargets.includes(OFFICIAL_SUPPORT_EMAIL)) {
+        adminTargets.push(OFFICIAL_SUPPORT_EMAIL);
+      }
+
+      const customerName = order.customerName || "সম্মানিত গ্রাহক";
+      const phone = order.phone || "";
+      const address = order.address || "ঠিকানা দেওয়া হয়নি";
+      const city = order.city || "";
+      const customerEmail = (order.customerEmail || order.email || "").trim();
+      const orderId = order.id || `RR-${Date.now()}`;
+      const totalAmount = Number(order.totalAmount || 0);
+      const shippingFee = Number(order.shippingFee || 0);
+      const discount = Number(order.discount || 0);
+      const notes = order.notes || "";
+      const orderDate = order.createdAt || new Date().toLocaleString("bn-BD", { timeZone: "Asia/Dhaka" });
+
+      const paymentMethodMap: Record<string, string> = {
+        cod: "ক্যাশ অন ডেলিভারি (Cash on Delivery)",
+        bkash: "বিকাশ (bKash)",
+        nagad: "নগদ (Nagad)",
+        rocket: "রকেট (Rocket)"
+      };
+      const paymentMethodLabel = paymentMethodMap[order.paymentMethod] || order.paymentMethod || "ক্যাশ অন ডেলিভারি";
+
+      const paymentStatusMap: Record<string, string> = {
+        PAID: "✅ পরিশোধিত (PAID)",
+        UNPAID: "⏳ অপরিশোধিত (UNPAID / COD)",
+        VERIFIED_PAID: "✅ ভেরিফাইড পেইড",
+        PENDING_VERIFICATION: "🔍 ভেরিফিকেশন পেন্ডিং",
+        FAILED: "❌ ব্যর্থ"
+      };
+      const paymentStatusLabel = paymentStatusMap[order.paymentStatus] || order.paymentStatus || "অপরিশোধিত";
+
+      const items = Array.isArray(order.items) ? order.items : [];
+      const itemsHtml = items.map((item: any, idx: number) => {
+        const p = item.product || {};
+        const nameBn = p.nameBn || p.nameEn || "পণ্য";
+        const nameEn = p.nameEn ? `(${p.nameEn})` : "";
+        const price = Number(p.price || 0);
+        const qty = Number(item.quantity || 1);
+        const itemTotal = price * qty;
+        const size = item.selectedSize ? `সাইজ: ${item.selectedSize}` : "";
+        const color = item.selectedColor ? `কালার: ${item.selectedColor}` : "";
+        const meta = [size, color].filter(Boolean).join(" | ");
+
+        return `
+          <tr style="border-bottom: 1px solid #f3f4f6;">
+            <td style="padding: 12px 10px; vertical-align: top;">
+              <div style="font-weight: 700; color: #111827; font-size: 14px;">${idx + 1}. ${nameBn} <span style="font-size: 12px; color: #6b7280;">${nameEn}</span></div>
+              ${meta ? `<div style="font-size: 11px; color: #be123c; font-weight: 600; margin-top: 2px;">${meta}</div>` : ""}
+              ${p.sku ? `<div style="font-size: 10px; color: #9ca3af; margin-top: 1px;">SKU: ${p.sku}</div>` : ""}
+            </td>
+            <td style="padding: 12px 10px; text-align: center; color: #374151; font-weight: 700; font-size: 13px; vertical-align: top;">
+              ${qty}
+            </td>
+            <td style="padding: 12px 10px; text-align: right; color: #374151; font-size: 13px; vertical-align: top;">
+              ৳${price.toLocaleString("en-US")}
+            </td>
+            <td style="padding: 12px 10px; text-align: right; color: #be123c; font-weight: 700; font-size: 14px; vertical-align: top;">
+              ৳${itemTotal.toLocaleString("en-US")}
+            </td>
+          </tr>
+        `;
+      }).join("");
+
+      const calculatedSubtotal = items.reduce((acc: number, item: any) => {
+        const price = Number(item.product?.price || 0);
+        const qty = Number(item.quantity || 1);
+        return acc + (price * qty);
+      }, 0);
+
+      const emailSubject = `🛍️ নতুন কাস্টমার অর্ডার! #${orderId} - ${customerName} (৳${totalAmount.toLocaleString("en-US")})`;
+
+      const emailHtml = `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 650px; margin: 0 auto; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 18px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.06);">
+          
+          <!-- Header Banner -->
+          <div style="background: linear-gradient(135deg, #4c0519 0%, #831843 100%); padding: 26px 24px; text-align: center; color: #ffffff;">
+            <h1 style="margin: 0; font-size: 26px; font-weight: 800; letter-spacing: 1px; color: #fef08a;">রঙিলা রূপ কিডস</h1>
+            <div style="display: inline-block; background: #be123c; color: #ffffff; font-size: 12px; font-weight: 700; padding: 4px 14px; border-radius: 20px; margin-top: 10px; text-transform: uppercase; letter-spacing: 0.5px;">
+              🎉 নতুন কাস্টমার অর্ডার অ্যালার্ট
+            </div>
+            <p style="margin: 8px 0 0 0; font-size: 13px; color: #fbcfe8;">
+              আপনার অনলাইন শপ থেকে একজন গ্রাহক সফলভাবে অর্ডার প্লেস করেছেন!
+            </p>
+          </div>
+
+          <!-- Highlight Order Info -->
+          <div style="background: #fffbeb; border-bottom: 1px solid #fde68a; padding: 16px 24px;">
+            <table style="width: 100%; border-collapse: collapse;">
+              <tr>
+                <td style="vertical-align: middle;">
+                  <span style="font-size: 11px; color: #92400e; font-weight: 600; text-transform: uppercase;">অর্ডার নম্বর:</span>
+                  <div style="font-size: 18px; font-weight: 800; color: #78350f; font-family: monospace;">#${orderId}</div>
+                </td>
+                <td style="vertical-align: middle; text-align: center;">
+                  <span style="font-size: 11px; color: #92400e; font-weight: 600; text-transform: uppercase;">অর্ডারের সময়:</span>
+                  <div style="font-size: 13px; font-weight: 700; color: #78350f;">${orderDate}</div>
+                </td>
+                <td style="vertical-align: middle; text-align: right;">
+                  <span style="font-size: 11px; color: #92400e; font-weight: 600; text-transform: uppercase;">সর্বমোট মূল্য:</span>
+                  <div style="font-size: 20px; font-weight: 800; color: #be123c;">৳${totalAmount.toLocaleString("en-US")}</div>
+                </td>
+              </tr>
+            </table>
+          </div>
+
+          <div style="padding: 24px;">
+            
+            <!-- Customer Details Card -->
+            <div style="background: #fdf2f8; border: 1px solid #fbcfe8; border-radius: 14px; padding: 18px; margin-bottom: 24px;">
+              <h3 style="margin: 0 0 12px 0; font-size: 15px; color: #9d174d;">
+                👤 গ্রাহকের ডেলিভারি তথ্য (Customer Information)
+              </h3>
+              <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                <tr>
+                  <td style="padding: 5px 0; color: #6b7280; width: 130px; font-weight: 600;">নাম:</td>
+                  <td style="padding: 5px 0; color: #111827; font-weight: 700; font-size: 14px;">${customerName}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 5px 0; color: #6b7280; font-weight: 600;">মোবাইল নম্বর:</td>
+                  <td style="padding: 5px 0;">
+                    <a href="tel:${phone}" style="color: #047857; font-weight: 800; font-size: 15px; text-decoration: none; background: #d1fae5; padding: 3px 10px; border-radius: 8px; display: inline-block;">
+                      📞 ${phone} <span style="font-size: 11px; font-weight: 600;">(কল করতে ট্যাপ করুন)</span>
+                    </a>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 5px 0; color: #6b7280; font-weight: 600;">ডেলিভারি ঠিকানা:</td>
+                  <td style="padding: 5px 0; color: #1f2937; font-weight: 600; line-height: 1.4;">${address}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 5px 0; color: #6b7280; font-weight: 600;">জেলা / জোন:</td>
+                  <td style="padding: 5px 0; color: #374151; font-weight: 600;">${city}</td>
+                </tr>
+                ${customerEmail ? `
+                <tr>
+                  <td style="padding: 5px 0; color: #6b7280; font-weight: 600;">ইমেইল এড্রেস:</td>
+                  <td style="padding: 5px 0; color: #1f2937; font-weight: 600;">${customerEmail}</td>
+                </tr>` : ""}
+                ${notes ? `
+                <tr>
+                  <td style="padding: 5px 0; color: #6b7280; font-weight: 600;">কাস্টমার নোট:</td>
+                  <td style="padding: 5px 0; color: #b45309; font-weight: 600; font-style: italic;">"${notes}"</td>
+                </tr>` : ""}
+              </table>
+            </div>
+
+            <!-- Order Items Table -->
+            <div style="margin-bottom: 24px;">
+              <h3 style="margin: 0 0 12px 0; font-size: 15px; color: #111827;">
+                📦 অর্ডারকৃত পণ্যের তালিকা (${items.length}টি আইটেম)
+              </h3>
+              <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                <thead>
+                  <tr style="background: #f9fafb; border-bottom: 2px solid #e5e7eb; color: #4b5563; font-size: 12px; text-transform: uppercase;">
+                    <th style="padding: 10px 8px; text-align: left;">পণ্য</th>
+                    <th style="padding: 10px 8px; text-align: center;">পরিমাণ</th>
+                    <th style="padding: 10px 8px; text-align: right;">মূল্য</th>
+                    <th style="padding: 10px 8px; text-align: right;">সর্বমোট</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${itemsHtml}
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Billing & Payment Details -->
+            <div style="margin-bottom: 24px;">
+              <!-- Summary Box -->
+              <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin-bottom: 16px;">
+                <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                  <tr>
+                    <td style="padding: 4px 0; color: #64748b;">আইটেম সাবটোটাল:</td>
+                    <td style="padding: 4px 0; text-align: right; color: #1e293b; font-weight: 600;">৳${calculatedSubtotal.toLocaleString("en-US")}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 4px 0; color: #64748b;">ডেলিভারি চার্জ:</td>
+                    <td style="padding: 4px 0; text-align: right; color: #1e293b; font-weight: 600;">৳${shippingFee.toLocaleString("en-US")}</td>
+                  </tr>
+                  ${discount > 0 ? `
+                  <tr>
+                    <td style="padding: 4px 0; color: #16a34a;">ডিসকাউন্ট:</td>
+                    <td style="padding: 4px 0; text-align: right; color: #16a34a; font-weight: 600;">- ৳${discount.toLocaleString("en-US")}</td>
+                  </tr>` : ""}
+                  <tr style="border-top: 1px solid #cbd5e1;">
+                    <td style="padding: 10px 0 4px 0; font-size: 15px; font-weight: 800; color: #0f172a;">সর্বমোট প্রদেয় বিল:</td>
+                    <td style="padding: 10px 0 4px 0; text-align: right; font-size: 18px; font-weight: 800; color: #be123c;">৳${totalAmount.toLocaleString("en-US")}</td>
+                  </tr>
+                </table>
+              </div>
+
+              <!-- Payment Details Box -->
+              <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 16px;">
+                <h4 style="margin: 0 0 8px 0; color: #166534; font-size: 14px;">💳 পেমেন্ট বিস্তারিত</h4>
+                <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                  <tr>
+                    <td style="padding: 3px 0; color: #4b5563; width: 140px;">পেমেন্ট পদ্ধতি:</td>
+                    <td style="padding: 3px 0; font-weight: 700; color: #15803d;">${paymentMethodLabel}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 3px 0; color: #4b5563;">পেমেন্ট স্ট্যাটাস:</td>
+                    <td style="padding: 3px 0; font-weight: 700; color: #15803d;">${paymentStatusLabel}</td>
+                  </tr>
+                  ${order.amountPaid ? `
+                  <tr>
+                    <td style="padding: 3px 0; color: #4b5563;">পরিশোধিত পরিমাণ:</td>
+                    <td style="padding: 3px 0; font-weight: 700; color: #15803d;">৳${order.amountPaid}</td>
+                  </tr>` : ""}
+                  ${order.amountDue !== undefined ? `
+                  <tr>
+                    <td style="padding: 3px 0; color: #4b5563;">ডেলিভারির সময় বকেয়া:</td>
+                    <td style="padding: 3px 0; font-weight: 800; color: #b91c1c;">৳${order.amountDue}</td>
+                  </tr>` : ""}
+                  ${order.trxId ? `
+                  <tr>
+                    <td style="padding: 3px 0; color: #4b5563;">TrxID:</td>
+                    <td style="padding: 3px 0; font-weight: 800; color: #1e293b; font-family: monospace;">${order.trxId}</td>
+                  </tr>` : ""}
+                  ${order.paymentPhone ? `
+                  <tr>
+                    <td style="padding: 3px 0; color: #4b5563;">পেমেন্ট প্রেরক নম্বর:</td>
+                    <td style="padding: 3px 0; font-weight: 700; color: #1e293b;">${order.paymentPhone}</td>
+                  </tr>` : ""}
+                </table>
+              </div>
+
+            </div>
+
+            <!-- Quick Action Buttons -->
+            <div style="text-align: center; margin-top: 24px; padding-top: 16px; border-top: 1px solid #f3f4f6;">
+              <a href="tel:${phone}" style="background: #059669; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 12px; font-weight: 700; font-size: 14px; display: inline-block; margin: 4px;">
+                📞 গ্রাহককে এখনই কল করুন
+              </a>
+              <a href="https://rongila-rup.firebaseapp.com/#admin" style="background: #4c0519; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 12px; font-weight: 700; font-size: 14px; display: inline-block; margin: 4px;">
+                📋 এডমিন প্যানেল ওপেন করুন
+              </a>
+            </div>
+
+          </div>
+
+          <!-- Footer -->
+          <div style="background: #fdf2f8; padding: 16px; text-align: center; font-size: 11px; color: #831843; border-top: 1px solid #fbcfe8;">
+            রঙিলা রূপ কিডস • স্বয়ংক্রিয় নতুন অর্ডার অ্যালার্ট নোটিফিকেশন সিস্টেম<br/>
+            অফিসিয়াল সাপোর্ট: supportrongilarup@gmail.com
+          </div>
+        </div>
+      `;
+
+      const plainText = `
+নতুন কাস্টমার অর্ডার অ্যালার্ট!
+অর্ডার আইডি: #${orderId}
+গ্রাহকের নাম: ${customerName}
+মোবাইল: ${phone}
+ঠিকানা: ${address}, ${city}
+সর্বমোট বিল: ৳${totalAmount}
+পেমেন্ট: ${paymentMethodLabel} (${paymentStatusLabel})
+আইটেম সংখ্যা: ${items.length}টি
+      `.trim();
+
+      const result = await sendRongilaRupEmail({
+        to: adminTargets.join(", "),
+        subject: emailSubject,
+        html: emailHtml,
+        text: plainText
+      });
+
+      console.log(`[ORDER NOTIFICATION] Alert sent to ${adminTargets.join(", ")} for order #${orderId}. Success: ${result.success}`);
+
+      if (customerEmail && customerEmail.includes("@")) {
+        sendCustomerOrderConfirmationEmail(order).catch(err => {
+          console.warn(`[CUSTOMER INVOICE EMAIL] Could not deliver to customer ${customerEmail}:`, err);
+        });
+      }
+
+      return result;
+    } catch (err: any) {
+      console.error("[ORDER EMAIL] Error generating notification email:", err);
+      return { success: false, error: err?.message || "Failed to send order email" };
+    }
+  }
+
+  // Send Invoice Confirmation to Customer (if customer provided email)
+  async function sendCustomerOrderConfirmationEmail(order: any): Promise<{ success: boolean; error?: string }> {
+    try {
+      const customerEmail = (order.customerEmail || order.email || "").trim();
+      if (!customerEmail || !customerEmail.includes("@")) {
+        return { success: false, error: "No customer email provided" };
+      }
+      const customerName = order.customerName || "সম্মানিত গ্রাহক";
+      const orderId = order.id;
+      const totalAmount = Number(order.totalAmount || 0);
+
+      const items = Array.isArray(order.items) ? order.items : [];
+      const itemsListHtml = items.map((item: any, idx: number) => {
+        const p = item.product || {};
+        const name = p.nameBn || p.nameEn || "পণ্য";
+        const qty = item.quantity || 1;
+        const price = Number(p.price || 0);
+        const size = item.selectedSize ? ` (${item.selectedSize})` : "";
+        return `<li style="margin-bottom: 6px; color: #374151;">${idx + 1}. <strong>${name}</strong>${size} × ${qty} টি = ৳${(price * qty).toLocaleString("en-US")}</li>`;
+      }).join("");
+
+      const subject = `🎉 রঙিলা রূপ কিডস - আপনার অর্ডার #${orderId} সফলভাবে গ্রহণ করা হয়েছে!`;
+      const html = `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 16px; overflow: hidden;">
+          <div style="background: #4c0519; padding: 24px; text-align: center; color: #ffffff;">
+            <h1 style="color: #fef08a; margin: 0; font-size: 24px;">রঙিলা রূপ কিডস</h1>
+            <p style="color: #fbcfe8; margin: 6px 0 0 0; font-size: 13px;">আপনার অর্ডারের জন্য আন্তরিক ধন্যবাদ!</p>
+          </div>
+          <div style="padding: 24px;">
+            <h2 style="color: #111827; font-size: 18px; margin-top: 0;">আসসালামু আলাইকুম, ${customerName}!</h2>
+            <p style="color: #4b5563; font-size: 14px; line-height: 1.6;">
+              আপনার অর্ডারটি সফলভাবে আমাদের সিস্টেমে তালিকাভুক্ত হয়েছে। আমাদের প্রতিনিধি দ্রুততম সময়ের মধ্যে আপনার সাথে ফোনে যোগাযোগ করে অর্ডারটি কনফার্ম করবেন।
+            </p>
+            <div style="background: #fdf2f8; border: 1px dashed #db2777; border-radius: 12px; padding: 16px; margin: 20px 0;">
+              <div style="font-size: 13px; color: #9d174d; font-weight: bold;">অর্ডার নম্বর: #${orderId}</div>
+              <div style="font-size: 18px; color: #831843; font-weight: 800; margin-top: 4px;">সর্বমোট প্রদেয় বিল: ৳${totalAmount.toLocaleString("en-US")}</div>
+              <div style="font-size: 12px; color: #6b7280; margin-top: 4px;">ডেলিভারি ঠিকানা: ${order.address}, ${order.city}</div>
+            </div>
+            <div style="margin: 20px 0;">
+              <h4 style="margin: 0 0 10px 0; font-size: 14px; color: #111827;">📦 অর্ডারকৃত আইটেম:</h4>
+              <ul style="padding-left: 20px; font-size: 13px; margin: 0;">
+                ${itemsListHtml}
+              </ul>
+            </div>
+            <p style="font-size: 13px; color: #6b7280;">
+              যেকোনো প্রয়োজনে আমাদের অফিসিয়াল হেল্পলাইনে যোগাযোগ করতে পারেন: <strong>01792765693</strong>
+            </p>
+          </div>
+          <div style="background: #f9fafb; padding: 14px; text-align: center; font-size: 11px; color: #9ca3af; border-top: 1px solid #f3f4f6;">
+            রঙিলা রূপ কিডস • ধন্যবাদ আমাদের সাথে থাকার জন্য!
+          </div>
+        </div>
+      `;
+
+      return await sendRongilaRupEmail({
+        to: customerEmail,
+        subject,
+        html,
+        text: `আপনার রঙিলা রূপ অর্ডার #${orderId} সফলভাবে গ্রহণ করা হয়েছে! মোট বিল: ৳${totalAmount}`
+      });
+    } catch (err: any) {
+      console.error("[CUSTOMER EMAIL ERROR]:", err);
+      return { success: false, error: err?.message };
+    }
+  }
+
   // 2. Create new order
   app.post("/api/orders", (req, res) => {
     try {
@@ -1191,8 +1568,9 @@ CRITICAL CONVERSATIONAL RULES:
       }
 
       const orders = readOrdersFromFile();
-      // Avoid duplicate insertion
       const existingIdx = orders.findIndex(o => o.id === newOrder.id);
+      const isBrandNewOrder = existingIdx < 0;
+
       if (existingIdx >= 0) {
         const existingOrder = orders[existingIdx];
         if (existingOrder.status === 'delivered' && newOrder.status !== 'delivered') {
@@ -1205,11 +1583,87 @@ CRITICAL CONVERSATIONAL RULES:
       }
 
       writeOrdersToFile(orders);
-      console.log(`[ORDER SYNC] New order stored on server: ${newOrder.id} (${newOrder.customerName} - ৳${newOrder.totalAmount})`);
+      console.log(`[ORDER SYNC] Order stored on server: ${newOrder.id} (${newOrder.customerName} - ৳${newOrder.totalAmount})`);
+
+      // Trigger instant email notification to admin upon customer order placement
+      if (isBrandNewOrder && !notifiedOrdersStore.has(newOrder.id)) {
+        notifiedOrdersStore.add(newOrder.id);
+        sendOrderNotificationEmail(newOrder).catch(err => {
+          console.error(`[ORDER EMAIL] Background notification error for #${newOrder.id}:`, err);
+        });
+      }
+
       res.json({ success: true, order: newOrder, totalCount: orders.length });
     } catch (err: any) {
       console.error("Failed to save order on server:", err);
       res.status(500).json({ error: "Failed to save order" });
+    }
+  });
+
+  // Explicit order notification trigger endpoint
+  app.post("/api/orders/notify-email", async (req, res) => {
+    try {
+      const { order } = req.body;
+      if (!order || !order.id) {
+        return res.status(400).json({ success: false, message: "Order data missing" });
+      }
+      if (notifiedOrdersStore.has(order.id)) {
+        return res.json({ success: true, message: "Notification already sent for this order", alreadySent: true });
+      }
+      notifiedOrdersStore.add(order.id);
+      const result = await sendOrderNotificationEmail(order);
+      return res.json({ success: result.success, error: result.error });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message });
+    }
+  });
+
+  // Test Order Notification Alert endpoint for Admin
+  app.post("/api/admin/test-order-alert", async (req, res) => {
+    try {
+      const sampleOrder = {
+        id: `TEST-${Math.floor(100000 + Math.random() * 900000)}`,
+        customerName: "আব্দুল্লাহ আল মামুন (টেস্ট কাস্টমার)",
+        phone: "01712345678",
+        customerEmail: "ataurulipur14@gmail.com",
+        address: "বাসা #২৫, রোড #৭, সেক্টর #৩, উত্তরা",
+        city: "ঢাকা [ঢাকার ভেতরে (৳৮০)]",
+        paymentMethod: "cod",
+        paymentStatus: "UNPAID",
+        totalAmount: 1880,
+        shippingFee: 80,
+        discount: 0,
+        notes: "টেস্ট অর্ডার অ্যালার্ট যাচাইকরণ",
+        createdAt: new Date().toLocaleString("bn-BD", { timeZone: "Asia/Dhaka" }),
+        items: [
+          {
+            quantity: 2,
+            selectedSize: "2-3 Years",
+            selectedColor: "গোলাপী",
+            product: {
+              nameBn: "বেবি প্রিন্সেস পার্টি ফ্রক",
+              nameEn: "Baby Princess Party Frock",
+              price: 900,
+              sku: "RR-B01"
+            }
+          }
+        ]
+      };
+
+      const result = await sendOrderNotificationEmail(sampleOrder);
+      if (result.success) {
+        return res.json({
+          success: true,
+          message: "✅ টেস্ট নতুন অর্ডার ইমেইল অ্যালার্ট সফলভাবে পাঠানো হয়েছে! আপনার জিমেইল চেক করুন।"
+        });
+      } else {
+        return res.status(500).json({
+          success: false,
+          message: `ইমেইল পাঠানো যায়নি: ${result.error || "অজ্ঞাত ত্রুটি"}`
+        });
+      }
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err?.message || "সার্ভার ত্রুটি" });
     }
   });
 
